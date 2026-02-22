@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npm install 2>&)",
+      "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npx tsc --noEmit 2>&1)",
+      "Bash(ls:*)"
+    ]
+  }
+}
