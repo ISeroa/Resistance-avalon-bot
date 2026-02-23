@@ -42,14 +42,12 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
   const voteCount = Object.keys(room.teamVotes).length;
   const totalPlayers = room.players.length;
 
-  // 투표 완료 ephemeral 응답
   await interaction.reply({
     content: isApprove ? '✅ 찬성으로 투표했습니다.' : '❌ 반대로 투표했습니다.',
     flags: MessageFlags.Ephemeral,
   });
 
   if (voteCount < totalPlayers) {
-    // 아직 전원 투표 전 — 진행 상황만 업데이트
     await interaction.message.edit({
       content: `🗳️ 투표 진행 중... **${voteCount}/${totalPlayers}**명 완료`,
     });
