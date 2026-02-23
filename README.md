@@ -53,25 +53,26 @@ Discord.js v14 + TypeScript 기반의
 ---
 
 ## 🗂 프로젝트 구조
+```text
 src/
 ├── index.ts
 ├── bot.ts
 ├── commands/
-│ └── avalon.ts
+│   └── avalon.ts
 ├── game/
-│ ├── GameRoom.ts
-│ ├── GameState.ts
-│ ├── Role.ts
-│ ├── teamSizeTable.ts
-│ └── gameManager.ts
+│   ├── GameRoom.ts
+│   ├── GameState.ts
+│   ├── Role.ts
+│   ├── teamSizeTable.ts
+│   └── gameManager.ts
 ├── interactions/
-│ ├── proposal.ts
-│ ├── teamVote.ts
-│ ├── questVote.ts
-│ └── assassination.ts
+│   ├── proposal.ts
+│   ├── teamVote.ts
+│   ├── questVote.ts
+│   └── assassination.ts
 └── utils/
-└── helpers.ts
-
+    └── helpers.ts
+```
 ---
 
 ## 🔧 실행 방법
