@@ -1,6 +1,13 @@
 import { RoleName } from './roles';
 
-export type GamePhase = 'waiting' | 'in_progress' | 'finished';
+export type GamePhase =
+  | 'waiting'      // 로비 대기 중
+  | 'proposal'     // 팀 제안 중
+  | 'team_vote'    // 팀 찬반 투표 중
+  | 'quest_vote'   // 퀘스트 투표 중 (Phase 5)
+  | 'assassination'// 암살 단계 (Phase 5+)
+  | 'finished';    // 게임 종료
+
 export type QuestResult = 'success' | 'fail';
 
 export interface Player {

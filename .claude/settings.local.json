@@ -8,7 +8,9 @@
       "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npm run dev 2>&1)",
       "Bash(tail:*)",
       "Bash(head:*)",
-      "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npm test 2>&1)"
+      "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npm test 2>&1)",
+      "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npx tsc --noEmit 2>&1 && npm test 2>&1)",
+      "Bash(cd:*)"
     ]
   }
 }
