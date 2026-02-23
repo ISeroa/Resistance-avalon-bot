@@ -72,6 +72,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
 
   if (approved) {
     room.phase = 'quest_vote';
+    room.teamVotes = {};
     room.questVotes = {};
     const teamMentions = room.currentTeam.map(mentionUser).join(', ');
 
@@ -283,6 +284,9 @@ async function resolveQuest(
     room.phase = 'finished';
     saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
   } else if (winState === 'good_wins_assassination') {
+    room.currentTeam = [];
+    room.teamVotes = {};
+    room.questVotes = {};
     room.phase = 'assassination';
   } else {
     room.round++;
