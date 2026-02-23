@@ -119,6 +119,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
     room.currentTeam = [];
 
     if (room.proposalNumber >= 5) {
+      clearQuestTimer(guildId, channelId);
       room.phase = 'finished';
       saveGame({ room, winner: 'evil', endReason: 'rejection' });
 
@@ -265,6 +266,7 @@ async function resolveQuest(
 ): Promise<void> {
   // guard: 타임아웃 콜백과 마지막 투표가 겹칠 때 중복 실행 방지
   if (room.phase !== 'quest_vote') return;
+  clearQuestTimer(guildId, channelId);
 
   const failCount = Object.values(room.questVotes).filter((v) => !v).length;
   const failed = isQuestFailed(failCount, room.players.length, room.round);

@@ -1,4 +1,5 @@
 import { GameState, createGameState } from './GameState';
+import { clearQuestTimer } from './timerManager';
 
 // key 형식: `${guildId}-${channelId}`
 type RoomKey = string;
@@ -25,6 +26,7 @@ export function createRoom(
 }
 
 export function deleteRoom(guildId: string, channelId: string): boolean {
+  clearQuestTimer(guildId, channelId);
   return rooms.delete(makeKey(guildId, channelId));
 }
 
