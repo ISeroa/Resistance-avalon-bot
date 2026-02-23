@@ -54,6 +54,9 @@ export const data = new SlashCommandBuilder()
       .setName('assassinate')
       .setDescription('멀린을 암살합니다 (암살자 전용)')
       .addUserOption((o) => o.setName('target').setDescription('암살 대상').setRequired(true)),
+  )
+  .addSubcommand((sub) =>
+    sub.setName('restart').setDescription('게임 재시작 투표를 시작합니다 (게임 진행 중 전용)'),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -69,6 +72,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     case 'start':   return handleStart(interaction);
     case 'propose':    return handlePropose(interaction);
     case 'assassinate': return handleAssassinate(interaction);
+    case 'restart':     return handleRestart(interaction);
   }
 }
 
@@ -163,6 +167,14 @@ async function handleLeave(interaction: ChatInputCommandInteraction): Promise<vo
     return;
   }
 
+  if (room.phase !== 'waiting' && room.phase !== 'finished') {
+    await interaction.reply({
+      content: '게임 진행 중에는 나갈 수 없습니다. `/avalon restart`로 재시작 투표를 하거나 게임이 끝날 때까지 기다려주세요.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   if (room.hostUserId === userId) {
     deleteRoom(guildId, channelId);
     await interaction.reply({ content: `🚪 방장 ${mentionUser(userId)}님이 나가서 방이 해체되었습니다.` });
@@ -220,6 +232,10 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
       { name: '라운드', value: `${room.round} / 5`, inline: true },
       { name: '리더 👑', value: leader ? mentionUser(leader.id) : '?', inline: true },
     );
+    if (room.questResults.length > 0) {
+      const record = room.questResults.map((r) => (r === 'success' ? '✅' : '❌')).join(' ');
+      embed.addFields({ name: '퀘스트 기록', value: record });
+    }
   }
 
   await interaction.reply({ embeds: [embed] });
@@ -240,6 +256,14 @@ async function handleCancel(interaction: ChatInputCommandInteraction): Promise<v
 
   if (room.hostUserId !== interaction.user.id) {
     await interaction.reply({ content: '방장만 방을 취소할 수 있습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (room.phase !== 'waiting' && room.phase !== 'finished') {
+    await interaction.reply({
+      content: '게임 진행 중에는 취소할 수 없습니다. `/avalon restart`로 재시작 투표를 사용하세요.',
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -492,4 +516,46 @@ async function handleAssassinate(interaction: ChatInputCommandInteraction): Prom
 
     await interaction.reply({ embeds: [embed] });
   }
+}
+
+async function handleRestart(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { guildId, channelId } = interaction;
+  if (!guildId) {
+    await interaction.reply({ content: '이 커맨드는 서버에서만 사용 가능합니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const room = getRoom(guildId, channelId);
+  if (!room) {
+    await interaction.reply({ content: '이 채널에 방이 없습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (room.phase === 'waiting') {
+    await interaction.reply({ content: '게임이 시작되지 않았습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!room.players.some((p) => p.id === interaction.user.id)) {
+    await interaction.reply({ content: '방 참가자만 재시작 투표를 시작할 수 있습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // 기존 투표 초기화 후 새 투표 시작
+  room.restartVotes = {};
+
+  const embed = new EmbedBuilder()
+    .setTitle('🔄 게임 재시작 투표')
+    .setColor(0x5865f2)
+    .setDescription(
+      `${mentionUser(interaction.user.id)}님이 재시작을 제안했습니다.\n현재 **${room.players.length}명**으로 새 게임을 시작합니다.`,
+    )
+    .setFooter({ text: '과반 찬성 시 즉시 재시작됩니다.' });
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId('restart_yes').setLabel('✅ 재시작').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('restart_no').setLabel('❌ 종료').setStyle(ButtonStyle.Danger),
+  );
+
+  await interaction.reply({ embeds: [embed], components: [row] });
 }

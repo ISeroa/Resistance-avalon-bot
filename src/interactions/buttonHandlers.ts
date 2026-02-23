@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 import { getRoom } from '../game/gameManager';
 import { isMajorityApprove, isQuestFailed, checkWinCondition, getTeamSize } from '../game/questConfig';
-import { ROLE_INFO } from '../game/roles';
+import { ROLE_INFO, assignRoles, buildDmMessage } from '../game/roles';
 import { GameState } from '../game/GameState';
 import { mentionUser } from '../utils/helpers';
 
@@ -257,7 +257,7 @@ async function resolveQuest(
     const embed = new EmbedBuilder()
       .setTitle('🗡️ 암살 단계 시작')
       .setColor(0xe74c3c)
-      .setDescription('퀘스트 3번 성공! 암살자는 멀린을 지목하세요.\n(Phase 6 구현 예정)')
+      .setDescription('퀘스트 3번 성공!\n암살자는 `/avalon assassinate`로 멀린을 지목하세요.\n(암살자는 역할 DM을 확인하세요.)')
       .addFields(
         { name: '퀘스트 기록', value: questRecord },
       );
@@ -291,4 +291,132 @@ async function resolveQuest(
     );
 
   await channel.send({ embeds: [embed] });
+}
+
+// ── 재시작 투표 버튼 핸들러 ───────────────────────────────
+
+export async function handleRestartVoteButton(interaction: ButtonInteraction): Promise<void> {
+  const { guildId, channelId } = interaction;
+  if (!guildId) return;
+
+  const room = getRoom(guildId, channelId);
+  if (!room) {
+    await interaction.reply({ content: '방이 없습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const userId = interaction.user.id;
+
+  if (!room.players.some((p) => p.id === userId)) {
+    await interaction.reply({ content: '방 참가자만 투표할 수 있습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (userId in room.restartVotes) {
+    await interaction.reply({ content: '이미 투표했습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const isYes = interaction.customId === 'restart_yes';
+  room.restartVotes[userId] = isYes;
+
+  await interaction.reply({
+    content: isYes ? '✅ 재시작에 투표했습니다.' : '❌ 종료에 투표했습니다.',
+    flags: MessageFlags.Ephemeral,
+  });
+
+  const totalPlayers = room.players.length;
+  const voteCount = Object.keys(room.restartVotes).length;
+  const yesCount = Object.values(room.restartVotes).filter((v) => v).length;
+  const noCount = voteCount - yesCount;
+  const majority = Math.floor(totalPlayers / 2) + 1;
+
+  if (yesCount >= majority) {
+    room.restartVotes = {};
+    await performRestart(interaction, room);
+    return;
+  }
+
+  if (noCount >= majority) {
+    room.restartVotes = {};
+    await interaction.message.edit({
+      content: `🚫 재시작 투표 부결 (찬성 ${yesCount} / 반대 ${noCount})`,
+      embeds: [],
+      components: [],
+    });
+    return;
+  }
+
+  // 전원 투표했지만 과반 미달 (동수) → 부결
+  if (voteCount >= totalPlayers) {
+    room.restartVotes = {};
+    await interaction.message.edit({
+      content: `🚫 재시작 투표 부결 (찬성 ${yesCount} / 반대 ${noCount})`,
+      embeds: [],
+      components: [],
+    });
+    return;
+  }
+
+  await interaction.message.edit({
+    content: `🔄 재시작 투표 진행 중... **${voteCount}/${totalPlayers}**명 (찬성 ${yesCount} / 반대 ${noCount})`,
+  });
+}
+
+// ── 게임 재시작 처리 ─────────────────────────────────────
+
+async function performRestart(
+  interaction: ButtonInteraction,
+  room: GameState,
+): Promise<void> {
+  const playerIds = room.players.map((p) => p.id);
+
+  room.roles = assignRoles(playerIds, playerIds.length);
+  room.phase = 'proposal';
+  room.round = 1;
+  room.leaderIndex = Math.floor(Math.random() * playerIds.length);
+  room.proposalNumber = 0;
+  room.questResults = [];
+  room.currentTeam = [];
+  room.teamVotes = {};
+  room.questVotes = {};
+
+  const dmFailed: string[] = [];
+  await Promise.all(
+    room.players.map(async (player) => {
+      const role = room.roles.get(player.id)!;
+      const msg = buildDmMessage(player.id, role, room.roles);
+      try {
+        const user = await interaction.client.users.fetch(player.id);
+        await user.send(msg);
+      } catch {
+        dmFailed.push(player.id);
+      }
+    }),
+  );
+
+  const leader = room.players[room.leaderIndex]!;
+  const teamSize = getTeamSize(room.players.length, room.round);
+
+  const embed = new EmbedBuilder()
+    .setTitle('🔄 게임 재시작!')
+    .setColor(0x5865f2)
+    .setDescription('각자 DM으로 새 역할을 확인하세요.')
+    .addFields(
+      { name: '인원', value: `${room.players.length}명`, inline: true },
+      { name: '라운드', value: '1 / 5', inline: true },
+      { name: '리더 👑', value: mentionUser(leader.id) },
+      { name: '이번 라운드 팀 크기', value: `${teamSize}명`, inline: true },
+      { name: '다음 행동', value: `${mentionUser(leader.id)}님이 \`/avalon propose\`로 팀원을 제안하세요.` },
+    );
+
+  const dmWarning = dmFailed.length > 0
+    ? `⚠️ DM 수신 실패: ${dmFailed.map(mentionUser).join(', ')}\n`
+    : '';
+
+  await interaction.message.edit({
+    content: dmWarning || null,
+    embeds: [embed],
+    components: [],
+  });
 }
