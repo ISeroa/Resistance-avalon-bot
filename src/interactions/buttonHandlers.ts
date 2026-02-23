@@ -22,6 +22,8 @@ import { saveGame } from '../db/gameHistory';
 export async function handleTeamVoteButton(interaction: ButtonInteraction): Promise<void> {
   const { guildId, channelId } = interaction;
   if (!guildId) return;
+  const [, cidGuild, cidChannel] = interaction.customId.split(':');
+  if (cidGuild !== guildId || cidChannel !== channelId) return;
 
   const room = getRoom(guildId, channelId);
   if (!room || room.phase !== 'team_vote') {
@@ -381,6 +383,8 @@ async function resolveQuest(
 export async function handleRestartVoteButton(interaction: ButtonInteraction): Promise<void> {
   const { guildId, channelId } = interaction;
   if (!guildId) return;
+  const [, cidGuild, cidChannel] = interaction.customId.split(':');
+  if (cidGuild !== guildId || cidChannel !== channelId) return;
 
   const room = getRoom(guildId, channelId);
   if (!room) {
@@ -523,6 +527,10 @@ export async function handleProposeMenu(interaction: UserSelectMenuInteraction):
   const channelId = parts[2];
 
   if (!guildId || !channelId) {
+    await interaction.update({ content: '잘못된 요청입니다.', components: [] });
+    return;
+  }
+  if (interaction.guildId !== guildId || interaction.channelId !== channelId) {
     await interaction.update({ content: '잘못된 요청입니다.', components: [] });
     return;
   }
