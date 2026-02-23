@@ -1,5 +1,6 @@
 import {
   ButtonInteraction,
+  Client,
   EmbedBuilder,
   MessageFlags,
   ActionRowBuilder,
@@ -10,6 +11,7 @@ import { getRoom } from '../game/gameManager';
 import { isMajorityApprove, isQuestFailed, checkWinCondition, getTeamSize } from '../game/questConfig';
 import { ROLE_INFO, assignRoles, buildDmMessage } from '../game/roles';
 import { GameState } from '../game/GameState';
+import { setQuestTimer, clearQuestTimer, QUEST_TIMEOUT_MS } from '../game/timerManager';
 import { mentionUser } from '../utils/helpers';
 
 // ── 팀 투표 버튼 핸들러 ───────────────────────────────────
@@ -67,6 +69,26 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
 
     const dmFailed = await sendQuestVoteDms(interaction, room, guildId, channelId);
 
+    // ── 퀘스트 투표 타임아웃 설정 ──
+    const client = interaction.client;
+    setQuestTimer(guildId, channelId, async () => {
+      const r = getRoom(guildId, channelId);
+      if (!r || r.phase !== 'quest_vote') return;
+
+      const timedOut = r.currentTeam.filter((id) => !(id in r.questVotes));
+      for (const id of timedOut) r.questVotes[id] = true; // 미투표 → 성공 처리
+
+      const ch = await client.channels.fetch(channelId).catch(() => null);
+      if (ch?.isTextBased() && timedOut.length > 0) {
+        await ch.send({
+          content: `⏰ 퀘스트 투표 시간 초과 (${QUEST_TIMEOUT_MS / 60000}분)!\n미투표: ${timedOut.map(mentionUser).join(', ')} → 성공으로 처리됩니다.`,
+        });
+      }
+
+      await resolveQuest(client, r, guildId, channelId);
+    });
+
+    const timeoutMin = QUEST_TIMEOUT_MS / 60000;
     const embed = new EmbedBuilder()
       .setTitle('✅ 팀 구성 통과!')
       .setColor(0x2ecc71)
@@ -77,8 +99,8 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
       )
       .setDescription(
         dmFailed.length > 0
-          ? `⚠️ DM 실패: ${dmFailed.map(mentionUser).join(', ')}\n📨 나머지 팀원들에게 퀘스트 투표 DM을 보냈습니다.`
-          : '📨 팀원들에게 퀘스트 투표 DM을 보냈습니다. 투표를 완료해주세요.',
+          ? `⚠️ DM 실패: ${dmFailed.map(mentionUser).join(', ')}\n📨 나머지 팀원들에게 퀘스트 투표 DM을 보냈습니다. (${timeoutMin}분 내 완료)`
+          : `📨 팀원들에게 퀘스트 투표 DM을 보냈습니다. **${timeoutMin}분** 내에 투표해주세요.`,
       );
 
     await interaction.message.edit({ content: null, embeds: [embed], components: [] });
@@ -155,7 +177,7 @@ async function sendQuestVoteDms(
       try {
         const user = await interaction.client.users.fetch(userId);
         await user.send({
-          content: `🗺️ **퀘스트 투표** (라운드 ${room.round})\n퀘스트 결과를 선택하세요.`,
+          content: `🗺️ **퀘스트 투표** (라운드 ${room.round})\n퀘스트 결과를 선택하세요. (**${QUEST_TIMEOUT_MS / 60000}분** 내에 투표하지 않으면 성공으로 처리됩니다.)`,
           components: [row],
         });
       } catch {
@@ -210,13 +232,15 @@ export async function handleQuestVoteButton(interaction: ButtonInteraction): Pro
     return; // 아직 전원 투표 전
   }
 
-  await resolveQuest(interaction, room, guildId, channelId);
+  // 전원 투표 완료 → 타이머 취소 후 결과 처리
+  clearQuestTimer(guildId, channelId);
+  await resolveQuest(interaction.client, room, guildId, channelId);
 }
 
 // ── 퀘스트 결과 처리 ─────────────────────────────────────
 
 async function resolveQuest(
-  interaction: ButtonInteraction,
+  client: Client,
   room: GameState,
   guildId: string,
   channelId: string,
@@ -230,7 +254,7 @@ async function resolveQuest(
   const winState = checkWinCondition(room.questResults);
   const questRecord = room.questResults.map((r) => (r === 'success' ? '✅' : '❌')).join(' ');
 
-  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased()) return;
 
   if (winState === 'evil_wins') {
@@ -367,6 +391,9 @@ async function performRestart(
   interaction: ButtonInteraction,
   room: GameState,
 ): Promise<void> {
+  // 진행 중 퀘스트 타이머 취소
+  clearQuestTimer(room.guildId, room.channelId);
+
   const playerIds = room.players.map((p) => p.id);
 
   room.roles = assignRoles(playerIds, playerIds.length);
