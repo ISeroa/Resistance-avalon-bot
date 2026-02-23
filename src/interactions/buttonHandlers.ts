@@ -117,6 +117,28 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
 
     await interaction.message.edit({ content: null, embeds: [embed], components: [] });
 
+    // ── DM 실패 플레이어 채널 대체 버튼 전송 ──
+    if (dmFailed.length > 0) {
+      const fallbackCh = await interaction.client.channels.fetch(channelId).catch(() => null);
+      if (fallbackCh?.isTextBased() && fallbackCh.type !== ChannelType.GroupDM) {
+        await Promise.all(
+          dmFailed.map((userId) =>
+            (fallbackCh as import('discord.js').TextChannel).send({
+              content: `📢 ${mentionUser(userId)}님 DM 전송 실패 — 아래 버튼으로 퀘스트 투표해주세요.`,
+              components: [
+                new ActionRowBuilder<ButtonBuilder>().addComponents(
+                  new ButtonBuilder()
+                    .setCustomId(`quest_success:${guildId}:${channelId}`)
+                    .setLabel('✅ 성공')
+                    .setStyle(ButtonStyle.Success),
+                ),
+              ],
+            }),
+          ),
+        );
+      }
+    }
+
   } else {
     room.proposalNumber++;
     room.teamVotes = {};
