@@ -7,6 +7,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   UserSelectMenuBuilder,
+  ChannelType,
 } from 'discord.js';
 import { hasRoom, createRoom, getRoom, deleteRoom } from '../game/gameManager';
 import { assignRoles, buildDmMessage, getAssassinId, getMerlinId, ROLE_INFO } from '../game/roles';
@@ -397,6 +398,14 @@ async function handlePropose(interaction: ChatInputCommandInteraction): Promise<
     components: [row],
     flags: MessageFlags.Ephemeral,
   });
+
+  // 채널에 공개 알림: 리더가 팀원 선택 중임을 모든 플레이어에게 알림
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (channel?.isTextBased() && channel.type !== ChannelType.GroupDM) {
+    await channel.send({
+      content: `👑 ${mentionUser(leader.id)}님이 라운드 **${room.round}** 팀원 **${required}명**을 선택 중입니다...`,
+    });
+  }
 }
 
 async function handleAssassinate(interaction: ChatInputCommandInteraction): Promise<void> {

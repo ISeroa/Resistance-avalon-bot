@@ -29,6 +29,11 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
     return;
   }
 
+  if (room.activeTeamVoteMessageId && interaction.message.id !== room.activeTeamVoteMessageId) {
+    await interaction.reply({ content: '현재 진행 중인 투표 메시지가 아닙니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
   const userId = interaction.user.id;
 
   if (!room.players.some((p) => p.id === userId)) {
@@ -131,6 +136,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
       room.leaderIndex = (room.leaderIndex + 1) % room.players.length;
       room.phase = 'proposal';
       const newLeader = room.players[room.leaderIndex]!;
+      const teamSize = getTeamSize(room.players.length, room.round);
 
       const embed = new EmbedBuilder()
         .setTitle('❌ 팀 구성 부결')
@@ -144,6 +150,14 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
         .setFooter({ text: `제안 횟수 ${room.proposalNumber}/5` });
 
       await interaction.message.edit({ content: null, embeds: [embed], components: [] });
+
+      // 채널 하단에 새 메시지를 보내 현재 리더를 모든 플레이어에게 명확히 알림
+      const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+      if (channel?.isTextBased() && channel.type !== ChannelType.GroupDM) {
+        await channel.send({
+          content: `👑 다음 리더: ${mentionUser(newLeader.id)} | 라운드 **${room.round}** 팀원 **${teamSize}명** | 제안 횟수 **${room.proposalNumber}/5**\n${mentionUser(newLeader.id)}님이 \`/avalon propose\`로 팀원을 제안하세요.`,
+        });
+      }
     }
   }
 }
@@ -537,6 +551,7 @@ export async function handleProposeMenu(interaction: UserSelectMenuInteraction):
 
   const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
   if (channel?.isTextBased() && channel.type !== ChannelType.GroupDM) {
-    await channel.send({ embeds: [embed], components: [voteRow] });
+    const voteMsg = await channel.send({ embeds: [embed], components: [voteRow] });
+    room.activeTeamVoteMessageId = voteMsg.id;
   }
 }
