@@ -37,6 +37,7 @@ export interface GameState {
   restartVotes: Record<string, boolean>; // 재시작 투표
   restartVoteActive: boolean;            // 재시작 투표 진행 중 여부
   activeTeamVoteMessageId: string | null; // 현재 팀 투표 메시지 ID
+  isTransitioning: boolean;               // 상태 전환 중 중복 처리 방지 lock
 }
 
 export function createGameState(
@@ -62,5 +63,6 @@ export function createGameState(
     restartVotes: {},
     restartVoteActive: false,
     activeTeamVoteMessageId: null,
+    isTransitioning: false,
   };
 }

@@ -74,6 +74,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
 
   if (approved) {
     room.phase = 'quest_vote';
+    room.isTransitioning = false;
     room.teamVotes = {};
     room.questVotes = {};
     const teamMentions = room.currentTeam.map(mentionUser).join(', ');
@@ -269,6 +270,8 @@ async function resolveQuest(
 ): Promise<void> {
   // guard: 타임아웃 콜백과 마지막 투표가 겹칠 때 중복 실행 방지
   if (room.phase !== 'quest_vote') return;
+  if (room.isTransitioning) return;
+  room.isTransitioning = true;
   clearQuestTimer(guildId, channelId);
 
   const failCount = Object.values(room.questVotes).filter((v) => !v).length;
@@ -448,6 +451,7 @@ async function performRestart(
   room.teamVotes = {};
   room.questVotes = {};
   room.activeTeamVoteMessageId = null;
+  room.isTransitioning = false;
 
   const dmFailed: string[] = [];
   await Promise.all(
