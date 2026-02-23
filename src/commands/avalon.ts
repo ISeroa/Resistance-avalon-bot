@@ -556,8 +556,13 @@ async function handleRestart(interaction: ChatInputCommandInteraction): Promise<
     return;
   }
 
-  // 기존 투표 초기화 후 새 투표 시작
+  if (room.restartVoteActive) {
+    await interaction.reply({ content: '이미 재시작 투표가 진행 중입니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
   room.restartVotes = {};
+  room.restartVoteActive = true;
 
   const embed = new EmbedBuilder()
     .setTitle('🔄 게임 재시작 투표')

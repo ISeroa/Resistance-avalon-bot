@@ -359,12 +359,14 @@ export async function handleRestartVoteButton(interaction: ButtonInteraction): P
 
   if (yesCount >= majority) {
     room.restartVotes = {};
+    room.restartVoteActive = false;
     await performRestart(interaction, room);
     return;
   }
 
   if (noCount >= majority) {
     room.restartVotes = {};
+    room.restartVoteActive = false;
     await interaction.message.edit({
       content: `🚫 재시작 투표 부결 (찬성 ${yesCount} / 반대 ${noCount})`,
       embeds: [],
@@ -376,6 +378,7 @@ export async function handleRestartVoteButton(interaction: ButtonInteraction): P
   // 전원 투표했지만 과반 미달 (동수) → 부결
   if (voteCount >= totalPlayers) {
     room.restartVotes = {};
+    room.restartVoteActive = false;
     await interaction.message.edit({
       content: `🚫 재시작 투표 부결 (찬성 ${yesCount} / 반대 ${noCount})`,
       embeds: [],

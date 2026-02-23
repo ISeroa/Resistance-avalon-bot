@@ -10,7 +10,9 @@
       "Bash(head:*)",
       "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npm test 2>&1)",
       "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npx tsc --noEmit 2>&1 && npm test 2>&1)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && npm install better-sqlite3 && npm install -D @types/better-sqlite3 2>&1)",
+      "Bash(cd /d/GameDevelop/Avalon-Discord-Bot/avalon-bot && node -e \"\nconst { REST, Routes } = require\\('discord.js'\\);\nrequire\\('dotenv'\\).config\\(\\);\nconst rest = new REST\\(\\).setToken\\(process.env.DISCORD_TOKEN\\);\nrest.put\\(Routes.applicationGuildCommands\\(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID\\), { body: [] }\\)\n  .then\\(\\(\\) => console.log\\('길드 커맨드 삭제 완료'\\)\\)\n  .catch\\(console.error\\);\n\" 2>&1)"
     ]
   }
 }

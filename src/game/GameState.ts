@@ -35,6 +35,7 @@ export interface GameState {
   teamVotes: Record<string, boolean>;    // 팀 찬반 투표
   questVotes: Record<string, boolean>;   // 퀘스트 투표 (절대 채널에 출력 금지)
   restartVotes: Record<string, boolean>; // 재시작 투표
+  restartVoteActive: boolean;            // 재시작 투표 진행 중 여부
 }
 
 export function createGameState(
@@ -58,5 +59,6 @@ export function createGameState(
     teamVotes: {},
     questVotes: {},
     restartVotes: {},
+    restartVoteActive: false,
   };
 }
