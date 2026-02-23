@@ -6,6 +6,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  UserSelectMenuBuilder,
 } from 'discord.js';
 import { hasRoom, createRoom, getRoom, deleteRoom } from '../game/gameManager';
 import { assignRoles, buildDmMessage, getAssassinId, getMerlinId, ROLE_INFO } from '../game/roles';
@@ -43,12 +44,7 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((sub) =>
     sub
       .setName('propose')
-      .setDescription('퀘스트 팀원을 제안합니다 (리더 전용)')
-      .addUserOption((o) => o.setName('m1').setDescription('팀원 1').setRequired(true))
-      .addUserOption((o) => o.setName('m2').setDescription('팀원 2').setRequired(false))
-      .addUserOption((o) => o.setName('m3').setDescription('팀원 3').setRequired(false))
-      .addUserOption((o) => o.setName('m4').setDescription('팀원 4').setRequired(false))
-      .addUserOption((o) => o.setName('m5').setDescription('팀원 5').setRequired(false)),
+      .setDescription('퀘스트 팀원을 제안합니다 (리더 전용)'),
   )
   .addSubcommand((sub) =>
     sub
@@ -386,63 +382,21 @@ async function handlePropose(interaction: ChatInputCommandInteraction): Promise<
     return;
   }
 
-  // 제안된 팀원 수집 (중복 제거)
-  const opts = interaction.options;
-  const proposed = ['m1', 'm2', 'm3', 'm4', 'm5']
-    .map((k) => opts.getUser(k))
-    .filter((u): u is NonNullable<typeof u> => u !== null);
-
-  const uniqueIds = [...new Set(proposed.map((u) => u.id))];
-
-  // 방 참가자인지 확인
-  const nonMembers = uniqueIds.filter((id) => !room.players.some((p) => p.id === id));
-  if (nonMembers.length > 0) {
-    await interaction.reply({
-      content: `${nonMembers.map(mentionUser).join(', ')}님은 방에 참가하지 않았습니다.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   const required = getTeamSize(room.players.length, room.round);
-  if (uniqueIds.length !== required) {
-    await interaction.reply({
-      content: `이번 라운드(${room.round})는 **${required}명**을 제안해야 합니다. (현재 ${uniqueIds.length}명)`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
 
-  // 팀 확정 및 투표 단계로 전환
-  room.currentTeam = uniqueIds;
-  room.teamVotes = {};
-  room.phase = 'team_vote';
+  const selectMenu = new UserSelectMenuBuilder()
+    .setCustomId(`propose_team:${guildId}:${channelId}`)
+    .setPlaceholder(`팀원 ${required}명을 선택하세요`)
+    .setMinValues(required)
+    .setMaxValues(required);
 
-  const teamMentions = uniqueIds.map(mentionUser).join(', ');
+  const row = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(selectMenu);
 
-  const embed = new EmbedBuilder()
-    .setTitle('🗳️ 팀 구성 제안')
-    .setColor(0xf39c12)
-    .addFields(
-      { name: '라운드', value: `${room.round} / 5`, inline: true },
-      { name: '제안 횟수', value: `${room.proposalNumber + 1} / 5`, inline: true },
-      { name: '리더 👑', value: mentionUser(leader.id), inline: true },
-      { name: `제안 팀 (${uniqueIds.length}명)`, value: teamMentions },
-    )
-    .setFooter({ text: '모든 플레이어가 찬성 또는 반대를 눌러주세요.' });
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId('team_approve')
-      .setLabel('✅ 찬성')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('team_reject')
-      .setLabel('❌ 반대')
-      .setStyle(ButtonStyle.Danger),
-  );
-
-  await interaction.reply({ embeds: [embed], components: [row] });
+  await interaction.reply({
+    content: `라운드 **${room.round}** — 팀원 **${required}명**을 선택하세요. (정확히 ${required}명이어야 제출됩니다)`,
+    components: [row],
+    flags: MessageFlags.Ephemeral,
+  });
 }
 
 async function handleAssassinate(interaction: ChatInputCommandInteraction): Promise<void> {

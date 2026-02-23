@@ -1,5 +1,6 @@
 import {
   ButtonInteraction,
+  UserSelectMenuInteraction,
   Client,
   ChannelType,
   EmbedBuilder,
@@ -248,6 +249,9 @@ async function resolveQuest(
   guildId: string,
   channelId: string,
 ): Promise<void> {
+  // guard: 타임아웃 콜백과 마지막 투표가 겹칠 때 중복 실행 방지
+  if (room.phase !== 'quest_vote') return;
+
   const failCount = Object.values(room.questVotes).filter((v) => !v).length;
   const failed = isQuestFailed(failCount, room.players.length, room.round);
   const result = failed ? 'fail' : 'success';
@@ -257,13 +261,27 @@ async function resolveQuest(
   const winState = checkWinCondition(room.questResults);
   const questRecord = room.questResults.map((r) => (r === 'success' ? '✅' : '❌')).join(' ');
 
+  // ── 상태 변경을 첫 await 이전에 모두 완료 ──
+  // 이 시점 이후 두 번째 호출이 들어오면 위 phase guard에서 차단됨
+  if (winState === 'evil_wins') {
+    room.phase = 'finished';
+    saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
+  } else if (winState === 'good_wins_assassination') {
+    room.phase = 'assassination';
+  } else {
+    room.round++;
+    room.proposalNumber = 0;
+    room.leaderIndex = (room.leaderIndex + 1) % room.players.length;
+    room.currentTeam = [];
+    room.questVotes = {};
+    room.teamVotes = {};
+    room.phase = 'proposal';
+  }
+
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased() || channel.type === ChannelType.GroupDM) return;
 
   if (winState === 'evil_wins') {
-    room.phase = 'finished';
-    saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
-
     const embed = new EmbedBuilder()
       .setTitle('💀 악의 세력 승리!')
       .setColor(0x992d22)
@@ -278,8 +296,6 @@ async function resolveQuest(
   }
 
   if (winState === 'good_wins_assassination') {
-    room.phase = 'assassination';
-
     const embed = new EmbedBuilder()
       .setTitle('🗡️ 암살 단계 시작')
       .setColor(0xe74c3c)
@@ -292,15 +308,7 @@ async function resolveQuest(
     return;
   }
 
-  // ── 다음 라운드 ──
-  room.round++;
-  room.proposalNumber = 0;
-  room.leaderIndex = (room.leaderIndex + 1) % room.players.length;
-  room.currentTeam = [];
-  room.questVotes = {};
-  room.teamVotes = {};
-  room.phase = 'proposal';
-
+  // ── 다음 라운드 (state는 위에서 이미 변경됨) ──
   const nextLeader = room.players[room.leaderIndex]!;
   const teamSize = getTeamSize(room.players.length, room.round);
 
@@ -350,6 +358,9 @@ export async function handleRestartVoteButton(interaction: ButtonInteraction): P
     content: isYes ? '✅ 재시작에 투표했습니다.' : '❌ 종료에 투표했습니다.',
     flags: MessageFlags.Ephemeral,
   });
+
+  // await 이후 재진입 방지: 다른 핸들러가 이미 결과 처리를 완료했을 수 있음
+  if (!room.restartVoteActive) return;
 
   const totalPlayers = room.players.length;
   const voteCount = Object.keys(room.restartVotes).length;
@@ -451,4 +462,81 @@ async function performRestart(
     embeds: [embed],
     components: [],
   });
+}
+
+// ── 팀 구성 유저 셀렉트 메뉴 핸들러 ──────────────────────
+
+export async function handleProposeMenu(interaction: UserSelectMenuInteraction): Promise<void> {
+  const parts = interaction.customId.split(':');
+  const guildId = parts[1];
+  const channelId = parts[2];
+
+  if (!guildId || !channelId) {
+    await interaction.update({ content: '잘못된 요청입니다.', components: [] });
+    return;
+  }
+
+  const room = getRoom(guildId, channelId);
+  if (!room || room.phase !== 'proposal') {
+    await interaction.update({ content: '지금은 팀 제안 단계가 아닙니다.', components: [] });
+    return;
+  }
+
+  const leader = room.players[room.leaderIndex]!;
+  if (leader.id !== interaction.user.id) {
+    await interaction.update({
+      content: `현재 리더는 ${mentionUser(leader.id)}님입니다.`,
+      components: [],
+    });
+    return;
+  }
+
+  const selectedIds = interaction.values;
+
+  // 방 참가자인지 확인
+  const nonMembers = selectedIds.filter((id) => !room.players.some((p) => p.id === id));
+  if (nonMembers.length > 0) {
+    await interaction.update({
+      content: `${nonMembers.map(mentionUser).join(', ')}님은 방에 참가하지 않았습니다.`,
+      components: [],
+    });
+    return;
+  }
+
+  room.currentTeam = selectedIds;
+  room.teamVotes = {};
+  room.phase = 'team_vote';
+
+  // 에페머럴 메시지 완료 처리
+  await interaction.update({ content: '✅ 팀 구성이 제안되었습니다.', components: [] });
+
+  // 채널에 공개 투표 embed 전송
+  const teamMentions = selectedIds.map(mentionUser).join(', ');
+
+  const embed = new EmbedBuilder()
+    .setTitle('🗳️ 팀 구성 제안')
+    .setColor(0xf39c12)
+    .addFields(
+      { name: '라운드', value: `${room.round} / 5`, inline: true },
+      { name: '제안 횟수', value: `${room.proposalNumber + 1} / 5`, inline: true },
+      { name: '리더 👑', value: mentionUser(leader.id), inline: true },
+      { name: `제안 팀 (${selectedIds.length}명)`, value: teamMentions },
+    )
+    .setFooter({ text: '모든 플레이어가 찬성 또는 반대를 눌러주세요.' });
+
+  const voteRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId('team_approve')
+      .setLabel('✅ 찬성')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('team_reject')
+      .setLabel('❌ 반대')
+      .setStyle(ButtonStyle.Danger),
+  );
+
+  const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+  if (channel?.isTextBased() && channel.type !== ChannelType.GroupDM) {
+    await channel.send({ embeds: [embed], components: [voteRow] });
+  }
 }
