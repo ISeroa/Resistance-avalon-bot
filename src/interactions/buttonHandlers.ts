@@ -70,6 +70,8 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
   const rejectCount = totalPlayers - approveCount;
   const approved = isMajorityApprove(room.teamVotes, totalPlayers);
 
+  room.activeTeamVoteMessageId = null;
+
   if (approved) {
     room.phase = 'quest_vote';
     room.teamVotes = {};
@@ -280,6 +282,8 @@ async function resolveQuest(
 
   // ── 상태 변경을 첫 await 이전에 모두 완료 ──
   // 이 시점 이후 두 번째 호출이 들어오면 위 phase guard에서 차단됨
+  room.activeTeamVoteMessageId = null;
+
   if (winState === 'evil_wins') {
     room.phase = 'finished';
     saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
@@ -443,6 +447,7 @@ async function performRestart(
   room.currentTeam = [];
   room.teamVotes = {};
   room.questVotes = {};
+  room.activeTeamVoteMessageId = null;
 
   const dmFailed: string[] = [];
   await Promise.all(
