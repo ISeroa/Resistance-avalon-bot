@@ -1,6 +1,7 @@
 import {
   ButtonInteraction,
   Client,
+  ChannelType,
   EmbedBuilder,
   MessageFlags,
   ActionRowBuilder,
@@ -13,6 +14,7 @@ import { ROLE_INFO, assignRoles, buildDmMessage } from '../game/roles';
 import { GameState } from '../game/GameState';
 import { setQuestTimer, clearQuestTimer, QUEST_TIMEOUT_MS } from '../game/timerManager';
 import { mentionUser } from '../utils/helpers';
+import { saveGame } from '../db/gameHistory';
 
 // ── 팀 투표 버튼 핸들러 ───────────────────────────────────
 
@@ -79,7 +81,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
       for (const id of timedOut) r.questVotes[id] = true; // 미투표 → 성공 처리
 
       const ch = await client.channels.fetch(channelId).catch(() => null);
-      if (ch?.isTextBased() && timedOut.length > 0) {
+      if (ch?.isTextBased() && ch.type !== ChannelType.GroupDM && timedOut.length > 0) {
         await ch.send({
           content: `⏰ 퀘스트 투표 시간 초과 (${QUEST_TIMEOUT_MS / 60000}분)!\n미투표: ${timedOut.map(mentionUser).join(', ')} → 성공으로 처리됩니다.`,
         });
@@ -112,6 +114,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
 
     if (room.proposalNumber >= 5) {
       room.phase = 'finished';
+      saveGame({ room, winner: 'evil', endReason: 'rejection' });
 
       const embed = new EmbedBuilder()
         .setTitle('💀 악의 세력 승리!')
@@ -255,10 +258,11 @@ async function resolveQuest(
   const questRecord = room.questResults.map((r) => (r === 'success' ? '✅' : '❌')).join(' ');
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased()) return;
+  if (!channel?.isTextBased() || channel.type === ChannelType.GroupDM) return;
 
   if (winState === 'evil_wins') {
     room.phase = 'finished';
+    saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
 
     const embed = new EmbedBuilder()
       .setTitle('💀 악의 세력 승리!')

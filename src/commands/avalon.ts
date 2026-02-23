@@ -11,6 +11,7 @@ import { hasRoom, createRoom, getRoom, deleteRoom } from '../game/gameManager';
 import { assignRoles, buildDmMessage, getAssassinId, getMerlinId, ROLE_INFO } from '../game/roles';
 import { getTeamSize } from '../game/questConfig';
 import { mentionUser } from '../utils/helpers';
+import { saveGame } from '../db/gameHistory';
 
 const MIN_PLAYERS = 5;
 const MAX_PLAYERS = 10;
@@ -57,6 +58,15 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub.setName('restart').setDescription('게임 재시작 투표를 시작합니다 (게임 진행 중 전용)'),
+  )
+  .addSubcommand((sub) =>
+    sub.setName('history').setDescription('이 서버의 최근 게임 기록을 조회합니다'),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('stats')
+      .setDescription('플레이어의 전적을 조회합니다')
+      .addUserOption((o) => o.setName('user').setDescription('조회할 플레이어 (생략 시 본인)').setRequired(false)),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -73,6 +83,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     case 'propose':    return handlePropose(interaction);
     case 'assassinate': return handleAssassinate(interaction);
     case 'restart':     return handleRestart(interaction);
+    case 'history':     return handleHistory(interaction);
+    case 'stats':       return handleStats(interaction);
   }
 }
 
@@ -485,6 +497,8 @@ async function handleAssassinate(interaction: ChatInputCommandInteraction): Prom
     .join('\n');
 
   if (isMerlin) {
+    saveGame({ room, winner: 'evil', endReason: 'assassination_success' });
+
     const embed = new EmbedBuilder()
       .setTitle('💀 악의 세력 승리!')
       .setColor(0x992d22)
@@ -497,6 +511,7 @@ async function handleAssassinate(interaction: ChatInputCommandInteraction): Prom
     await interaction.reply({ embeds: [embed] });
 
   } else {
+    saveGame({ room, winner: 'good', endReason: 'assassination_failed' });
     const merlinId = getMerlinId(room.roles);
 
     const embed = new EmbedBuilder()
@@ -558,4 +573,86 @@ async function handleRestart(interaction: ChatInputCommandInteraction): Promise<
   );
 
   await interaction.reply({ embeds: [embed], components: [row] });
+}
+
+// ── history ──────────────────────────────────────────────
+
+const END_REASON_LABEL: Record<string, string> = {
+  quests_evil:           '퀘스트 3회 실패',
+  rejection:             '5연속 부결',
+  assassination_success: '암살 성공',
+  assassination_failed:  '암살 실패',
+};
+
+async function handleHistory(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { guildId } = interaction;
+  if (!guildId) {
+    await interaction.reply({ content: '이 커맨드는 서버에서만 사용 가능합니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const { getGuildHistory } = await import('../db/gameHistory');
+  const records = getGuildHistory(guildId, 10);
+
+  if (records.length === 0) {
+    await interaction.reply({ content: '아직 완료된 게임이 없습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const lines = records.map((r) => {
+    const winLabel = r.winner === 'good' ? '✨ 선 승리' : '💀 악 승리';
+    const reason = END_REASON_LABEL[r.end_reason] ?? r.end_reason;
+    const quests = (JSON.parse(r.quest_results) as string[])
+      .map((q) => (q === 'success' ? '✅' : '❌'))
+      .join('');
+    const date = new Date(r.ended_at).toLocaleDateString('ko-KR');
+    return `**#${r.id}** ${winLabel} | ${reason} | ${r.player_count}명 | ${quests || '-'} | ${date}`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle('📜 최근 게임 기록 (최대 10개)')
+    .setColor(0x5865f2)
+    .setDescription(lines.join('\n'));
+
+  await interaction.reply({ embeds: [embed] });
+}
+
+// ── stats ────────────────────────────────────────────────
+
+async function handleStats(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { guildId } = interaction;
+  if (!guildId) {
+    await interaction.reply({ content: '이 커맨드는 서버에서만 사용 가능합니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const target = interaction.options.getUser('user') ?? interaction.user;
+  const { getUserStats } = await import('../db/gameHistory');
+  const stats = getUserStats(target.id, guildId);
+
+  if (stats.totalGames === 0) {
+    await interaction.reply({
+      content: `${mentionUser(target.id)}님의 게임 기록이 없습니다.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const winRate = ((stats.wins / stats.totalGames) * 100).toFixed(1);
+  const roleLines = stats.roleBreakdown.map(({ role, games, wins: w }) => {
+    const rate = ((w / games) * 100).toFixed(0);
+    return `• ${role}: ${games}게임 (${w}승 ${games - w}패, ${rate}%)`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📊 ${target.displayName}님의 전적`)
+    .setColor(0x2ecc71)
+    .addFields(
+      { name: '총 게임', value: `${stats.totalGames}게임`, inline: true },
+      { name: '승리', value: `${stats.wins}승 (${winRate}%)`, inline: true },
+      { name: '패배', value: `${stats.losses}패`, inline: true },
+      { name: '역할별 전적', value: roleLines.join('\n') || '없음' },
+    );
+
+  await interaction.reply({ embeds: [embed] });
 }
