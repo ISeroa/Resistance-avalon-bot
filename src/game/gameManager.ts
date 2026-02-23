@@ -13,9 +13,13 @@ export function getRoom(guildId: string, channelId: string): GameState | undefin
   return rooms.get(makeKey(guildId, channelId));
 }
 
-export function createRoom(guildId: string, channelId: string): GameState {
+export function createRoom(
+  guildId: string,
+  channelId: string,
+  hostUserId: string,
+): GameState {
   const key = makeKey(guildId, channelId);
-  const state = createGameState(guildId, channelId);
+  const state = createGameState(guildId, channelId, hostUserId);
   rooms.set(key, state);
   return state;
 }
