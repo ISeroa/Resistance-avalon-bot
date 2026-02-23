@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createRoom, getRoom, hasRoom, deleteRoom, getAllRooms } from '../game/gameManager';
 
+// gameManager는 모듈 레벨 Map을 공유하므로 각 테스트 전에 방을 정리한다
 const G = 'guild-1';
 const C = 'channel-1';
 const HOST = 'user-host';
@@ -17,6 +18,8 @@ function cleanRoom() {
   deleteRoom(G, C);
 }
 
+// ────────────────────────────────────────────
+// 헬퍼: 방 생성 + 방장 참가 (create 커맨드 동작과 동일)
 function makeRoomWithHost() {
   const room = createRoom(G, C, HOST);
   room.players.push({ id: HOST, username: 'Host' });
@@ -39,12 +42,18 @@ describe('방 생성 (create)', () => {
   it('같은 채널에 방이 이미 있으면 중복 생성 불가', () => {
     makeRoomWithHost();
     expect(hasRoom(G, C)).toBe(true);
+    // create 커맨드는 hasRoom 체크 후 early return — 여기선 로직만 검증
     expect(getRoom(G, C)?.players).toHaveLength(1);
   });
 });
 
+// ────────────────────────────────────────────
+
 describe('참가 (join)', () => {
-  beforeEach(() => { cleanRoom(); makeRoomWithHost(); });
+  beforeEach(() => {
+    cleanRoom();
+    makeRoomWithHost();
+  });
 
   it('새 플레이어 참가 성공', () => {
     const room = getRoom(G, C)!;
@@ -54,7 +63,8 @@ describe('참가 (join)', () => {
 
   it('이미 참가한 플레이어는 중복 참가 불가', () => {
     const room = getRoom(G, C)!;
-    expect(room.players.some((p) => p.id === HOST)).toBe(true);
+    const alreadyIn = room.players.some((p) => p.id === HOST);
+    expect(alreadyIn).toBe(true);
   });
 
   it('게임이 시작된 방에는 참가 불가', () => {
@@ -65,13 +75,17 @@ describe('참가 (join)', () => {
 
   it('10명 초과 시 참가 불가', () => {
     const room = getRoom(G, C)!;
+    // 방장 포함 10명까지 채우기
     for (let i = 1; i < 10; i++) {
       room.players.push({ id: `user-${i}`, username: `User${i}` });
     }
     expect(room.players).toHaveLength(10);
-    expect(room.players.length >= 10).toBe(true);
+    const isFull = room.players.length >= 10;
+    expect(isFull).toBe(true);
   });
 });
+
+// ────────────────────────────────────────────
 
 describe('나가기 (leave)', () => {
   beforeEach(() => {
@@ -86,19 +100,22 @@ describe('나가기 (leave)', () => {
     room.players = room.players.filter((p) => p.id !== P1);
     expect(hasRoom(G, C)).toBe(true);
     expect(room.players.some((p) => p.id === P1)).toBe(false);
-    expect(room.players).toHaveLength(2);
+    expect(room.players).toHaveLength(2); // HOST + P2
   });
 
   it('방장이 나가면 방이 해체됨', () => {
-    deleteRoom(G, C);
+    deleteRoom(G, C); // leave-host 로직: deleteRoom 호출
     expect(hasRoom(G, C)).toBe(false);
   });
 
   it('방에 없는 사람은 나가기 불가', () => {
     const room = getRoom(G, C)!;
-    expect(room.players.some((p) => p.id === 'nobody')).toBe(false);
+    const isIn = room.players.some((p) => p.id === 'nobody');
+    expect(isIn).toBe(false);
   });
 });
+
+// ────────────────────────────────────────────
 
 describe('취소 (cancel)', () => {
   beforeEach(() => {
@@ -108,16 +125,22 @@ describe('취소 (cancel)', () => {
   });
 
   it('방장이 취소하면 방이 삭제됨', () => {
-    expect(getRoom(G, C)!.hostUserId).toBe(HOST);
+    const room = getRoom(G, C)!;
+    expect(room.hostUserId).toBe(HOST);
     deleteRoom(G, C);
     expect(hasRoom(G, C)).toBe(false);
   });
 
   it('방장이 아닌 사람은 취소 불가', () => {
-    expect(getRoom(G, C)!.hostUserId === P1).toBe(false);
+    const room = getRoom(G, C)!;
+    const isHost = room.hostUserId === P1;
+    expect(isHost).toBe(false);
+    // 방은 여전히 존재
     expect(hasRoom(G, C)).toBe(true);
   });
 });
+
+// ────────────────────────────────────────────
 
 describe('상태 조회 (status)', () => {
   beforeEach(cleanRoom);
@@ -129,6 +152,7 @@ describe('상태 조회 (status)', () => {
   it('방이 있으면 현재 인원과 방장 확인 가능', () => {
     const room = makeRoomWithHost();
     room.players.push({ id: P1, username: 'P1' });
+
     const found = getRoom(G, C)!;
     expect(found.hostUserId).toBe(HOST);
     expect(found.players).toHaveLength(2);
@@ -136,23 +160,30 @@ describe('상태 조회 (status)', () => {
   });
 });
 
+// ────────────────────────────────────────────
+
 describe('경계값 / 복합 시나리오', () => {
   beforeEach(cleanRoom);
 
   it('최소 인원 5명 미만이면 시작 불가 조건 검증', () => {
     const room = makeRoomWithHost();
+    // 방장 1명만 있는 상태
     expect(room.players.length < 5).toBe(true);
   });
 
   it('정확히 5명이면 시작 가능 조건 충족', () => {
     const room = makeRoomWithHost();
-    for (let i = 1; i < 5; i++) room.players.push({ id: `u${i}`, username: `U${i}` });
+    for (let i = 1; i < 5; i++) {
+      room.players.push({ id: `u${i}`, username: `U${i}` });
+    }
     expect(room.players.length >= 5).toBe(true);
   });
 
   it('방 해체 후 같은 채널에 새 방 생성 가능', () => {
     makeRoomWithHost();
     deleteRoom(G, C);
+    expect(hasRoom(G, C)).toBe(false);
+
     const newRoom = createRoom(G, C, P1);
     newRoom.players.push({ id: P1, username: 'P1' });
     expect(getRoom(G, C)?.hostUserId).toBe(P1);
