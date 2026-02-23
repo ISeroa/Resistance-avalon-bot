@@ -1,6 +1,6 @@
 # 🎭 Resistance: Avalon Discord Bot
 
-Discord.js v14 + TypeScript 기반의  
+Discord.js v14 + TypeScript 기반의
 레지스탕스: 아발론(Resistance: Avalon) 게임 봇 프로젝트.
 
 ---
@@ -8,10 +8,10 @@ Discord.js v14 + TypeScript 기반의
 ## 🎯 프로젝트 목표
 
 - 디스코드 서버에서 아발론 1판을 완전히 진행 가능한 봇 구현
-- Slash Command + 버튼 + Select Menu 기반 UI
-- 비밀 정보는 DM으로 전달
-- 메모리 기반 상태 저장 (MVP 단계)
-- 확장 가능 구조 설계 (향후 시크릿 히틀러 확장 가능)
+- Slash Command + 버튼 기반 UI
+- 비밀 정보(역할, 퀘스트 투표)는 DM으로 전달
+- 메모리 기반 게임 상태 + SQLite 기록 영속성
+- 확장 가능 구조 설계
 
 ---
 
@@ -20,82 +20,122 @@ Discord.js v14 + TypeScript 기반의
 - Node.js 18+
 - TypeScript (strict mode)
 - discord.js v14
+- better-sqlite3
 - dotenv
+- vitest (테스트)
 
 ---
 
-## 🚀 MVP 범위
+## ✅ 구현 완료 기능
 
-### 포함
-- 5~10인 플레이
-- 역할 배정 (Merlin / Assassin / Loyal / Minion)
-- 퀘스트 진행
-- 5연속 부결 악승 처리
-- 7인 이상 Quest4 2패 규칙
-- 암살 단계
+### 로비
+- `/avalon create` — 방 생성
+- `/avalon join` — 참가
+- `/avalon leave` — 나가기 (게임 진행 중 차단)
+- `/avalon status` — 방 상태 확인
+- `/avalon cancel` — 방 취소 (방장 전용, 게임 진행 중 차단)
 
-### 제외 (후속 확장)
-- Mordred / Oberon / Morgana
-- 통계 시스템
-- 멀티룸
-- DB 영속성
+### 게임 진행
+- `/avalon start` — 게임 시작 (방장 전용, 최소 5명), 역할 DM 발송
+- `/avalon propose` — 퀘스트 팀 제안 (리더 전용)
+- 팀 투표 — 채널 버튼 (찬성/반대), 5연속 부결 시 악 승리
+- 퀘스트 투표 — DM 버튼 (성공/실패), 5분 타임아웃 (미투표 → 성공 처리)
+- `/avalon assassinate` — 멀린 암살 (암살자 전용)
+- `/avalon restart` — 재시작 투표 (과반 찬성 시 새 게임)
+
+### 기록
+- `/avalon history` — 이 서버의 최근 10게임 목록
+- `/avalon stats [user]` — 플레이어 승률 및 역할별 전적
+
+---
+
+## 🎮 지원 인원 및 역할
+
+| 인원 | 선 | 악 | 역할 구성 |
+|------|----|----|-----------|
+| 5명  | 3  | 2  | Merlin, Percival, Loyal / Assassin, Morgana |
+| 6명  | 4  | 2  | Merlin, Percival, Loyal×2 / Assassin, Morgana |
+| 7명  | 4  | 3  | Merlin, Percival, Loyal×2 / Assassin, Morgana, Oberon |
+| 8명  | 5  | 3  | Merlin, Percival, Loyal×3 / Assassin, Morgana, Minion |
+| 9명  | 6  | 3  | Merlin, Percival, Loyal×4 / Assassin, Morgana, Mordred |
+| 10명 | 6  | 4  | Merlin, Percival, Loyal×4 / Assassin, Morgana, Mordred, Oberon |
+
+---
+
+## 💀 승리 조건
+
+| 조건 | 승자 |
+|------|------|
+| 퀘스트 3회 실패 | 악 |
+| 5연속 부결 | 악 |
+| 퀘스트 3번 성공 후 암살 성공 | 악 |
+| 퀘스트 3번 성공 후 암살 실패 | 선 |
 
 ---
 
 ## 🧠 설계 원칙
 
-1. 전역 단일 게임 객체 사용 금지
-2. guildId + channelId 기준 GameRoom Map 관리
-3. 모든 interaction은 state 검증 필수
-4. 비밀 정보는 절대 공개 채널 출력 금지
+1. guildId + channelId 기준 GameRoom Map 관리 (멀티룸 지원)
+2. 모든 interaction은 phase·권한·중복 검증 필수
+3. 비밀 정보(roles, questVotes)는 절대 공개 채널/콘솔 출력 금지
+4. 순수 함수 분리 → vitest 단위 테스트
 5. TypeScript strict 모드 유지
 
 ---
 
 ## 🗂 프로젝트 구조
+
 ```text
 src/
 ├── index.ts
 ├── bot.ts
+├── deploy-commands.ts
 ├── commands/
-│   └── avalon.ts
+│   └── avalon.ts          # 모든 슬래시 커맨드 핸들러
 ├── game/
-│   ├── GameRoom.ts
-│   ├── GameState.ts
-│   ├── Role.ts
-│   ├── teamSizeTable.ts
-│   └── gameManager.ts
+│   ├── GameState.ts       # 상태 타입 및 createGameState()
+│   ├── gameManager.ts     # 룸 Map 관리
+│   ├── roles.ts           # 역할 배정, DM 메시지 생성
+│   ├── questConfig.ts     # 팀 크기, 퀘스트 실패 조건, 승리 판정
+│   └── timerManager.ts    # 퀘스트 투표 타임아웃 (5분)
 ├── interactions/
-│   ├── proposal.ts
-│   ├── teamVote.ts
-│   ├── questVote.ts
-│   └── assassination.ts
+│   ├── router.ts          # slash/button 분기
+│   └── buttonHandlers.ts  # 팀투표·퀘스트투표·재시작투표 처리
+├── db/
+│   ├── database.ts        # SQLite 초기화 (data/avalon.db)
+│   └── gameHistory.ts     # saveGame(), getGuildHistory(), getUserStats()
 └── utils/
     └── helpers.ts
 ```
+
 ---
 
 ## 🔧 실행 방법
 
 ```bash
+# 최초 설정
 npm install
+cp .env.example .env   # DISCORD_TOKEN, DISCORD_CLIENT_ID 입력
+
+# 슬래시 커맨드 등록 (구조 변경 시에만)
 npm run deploy-commands
+
+# 개발
 npm run dev
 
-🪜 개발 전략
+# 테스트
+npm test
 
-이 프로젝트는 “기능을 단계적으로 쪼개서” 구현한다.
+# 프로덕션
+npm run build
+npm run start          # 또는 pm2 start dist/index.js --name avalon-bot
+```
 
-1. 스켈레톤 + ping 커맨드
+---
 
-2. Lobby 시스템
+## 🔑 환경 변수 (.env)
 
-3. 역할 배정 + DM 체크
-
-4. Proposal
-
-5. Team Vote
-
-6. Quest Vote
-
-7. Assassination
+```env
+DISCORD_TOKEN=your_bot_token
+DISCORD_CLIENT_ID=your_client_id
+```
