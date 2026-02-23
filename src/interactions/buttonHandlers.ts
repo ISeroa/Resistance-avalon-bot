@@ -14,6 +14,7 @@ import { isMajorityApprove, isQuestFailed, checkWinCondition, getTeamSize } from
 import { ROLE_INFO, assignRoles, buildDmMessage } from '../game/roles';
 import { GameState } from '../game/GameState';
 import { setQuestTimer, clearQuestTimer, QUEST_TIMEOUT_MS } from '../game/timerManager';
+import { toQuestVote, toProposalAfterRejection, toNextRound, toAssassination, toFinished } from '../game/transitions';
 import { mentionUser } from '../utils/helpers';
 import { saveGame } from '../db/gameHistory';
 
@@ -72,13 +73,8 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
   const rejectCount = totalPlayers - approveCount;
   const approved = isMajorityApprove(room.teamVotes, totalPlayers);
 
-  room.activeTeamVoteMessageId = null;
-
   if (approved) {
-    room.phase = 'quest_vote';
-    room.isTransitioning = false;
-    room.teamVotes = {};
-    room.questVotes = {};
+    toQuestVote(room);
     const teamMentions = room.currentTeam.map(mentionUser).join(', ');
 
     const dmFailed = await sendQuestVoteDms(interaction, room, guildId, channelId);
@@ -142,13 +138,12 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
     }
 
   } else {
-    room.proposalNumber++;
-    room.teamVotes = {};
-    room.currentTeam = [];
-
-    if (room.proposalNumber >= 5) {
+    if (room.proposalNumber + 1 >= 5) {
+      room.proposalNumber++;
+      room.teamVotes = {};
+      room.currentTeam = [];
       clearQuestTimer(guildId, channelId);
-      room.phase = 'finished';
+      toFinished(room);
       saveGame({ room, winner: 'evil', endReason: 'rejection' });
 
       const embed = new EmbedBuilder()
@@ -162,8 +157,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
       await interaction.message.edit({ content: null, embeds: [embed], components: [] });
 
     } else {
-      room.leaderIndex = (room.leaderIndex + 1) % room.players.length;
-      room.phase = 'proposal';
+      toProposalAfterRejection(room);
       const newLeader = room.players[room.leaderIndex]!;
       const teamSize = getTeamSize(room.players.length, room.round);
 
@@ -309,24 +303,13 @@ async function resolveQuest(
 
   // ── 상태 변경을 첫 await 이전에 모두 완료 ──
   // 이 시점 이후 두 번째 호출이 들어오면 위 phase guard에서 차단됨
-  room.activeTeamVoteMessageId = null;
-
   if (winState === 'evil_wins') {
-    room.phase = 'finished';
+    toFinished(room);
     saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
   } else if (winState === 'good_wins_assassination') {
-    room.currentTeam = [];
-    room.teamVotes = {};
-    room.questVotes = {};
-    room.phase = 'assassination';
+    toAssassination(room);
   } else {
-    room.round++;
-    room.proposalNumber = 0;
-    room.leaderIndex = (room.leaderIndex + 1) % room.players.length;
-    room.currentTeam = [];
-    room.questVotes = {};
-    room.teamVotes = {};
-    room.phase = 'proposal';
+    toNextRound(room);
   }
 
   const channel = await client.channels.fetch(channelId).catch(() => null);

@@ -13,6 +13,7 @@ import { hasRoom, createRoom, getRoom, deleteRoom } from '../game/gameManager';
 import { assignRoles, buildDmMessage, getAssassinId, getMerlinId, ROLE_INFO } from '../game/roles';
 import { getTeamSize } from '../game/questConfig';
 import { clearQuestTimer } from '../game/timerManager';
+import { toFinished } from '../game/transitions';
 import { mentionUser } from '../utils/helpers';
 import { saveGame } from '../db/gameHistory';
 
@@ -457,7 +458,7 @@ async function handleAssassinate(interaction: ChatInputCommandInteraction): Prom
   }
 
   clearQuestTimer(guildId, channelId);
-  room.phase = 'finished';
+  toFinished(room);
 
   const targetRole = room.roles.get(target.id);
   const isMerlin = targetRole === 'Merlin';
