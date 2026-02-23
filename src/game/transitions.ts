@@ -1,4 +1,5 @@
 import { GameState } from './GameState';
+import { clearQuestTimer } from './timerManager';
 
 /** team_vote 통과 → quest_vote */
 export function toQuestVote(room: GameState): void {
@@ -17,6 +18,7 @@ export function toProposalAfterRejection(room: GameState): void {
   room.leaderIndex = (room.leaderIndex + 1) % room.players.length;
   room.phase = 'proposal';
   room.activeTeamVoteMessageId = null;
+  room.isTransitioning = false;
 }
 
 /** 퀘스트 완료 → 다음 라운드, proposal */
@@ -29,6 +31,7 @@ export function toNextRound(room: GameState): void {
   room.teamVotes = {};
   room.phase = 'proposal';
   room.activeTeamVoteMessageId = null;
+  room.isTransitioning = false;
 }
 
 /** 퀘스트 3연 성공 → assassination */
@@ -38,10 +41,12 @@ export function toAssassination(room: GameState): void {
   room.questVotes = {};
   room.phase = 'assassination';
   room.activeTeamVoteMessageId = null;
+  room.isTransitioning = false;
 }
 
 /** 게임 종료 (어떤 경로든) */
 export function toFinished(room: GameState): void {
+  clearQuestTimer(room.guildId, room.channelId);
   room.phase = 'finished';
   room.activeTeamVoteMessageId = null;
 }

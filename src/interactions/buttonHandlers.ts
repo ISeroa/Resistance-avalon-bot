@@ -18,6 +18,8 @@ import { toQuestVote, toProposalAfterRejection, toNextRound, toAssassination, to
 import { mentionUser } from '../utils/helpers';
 import { saveGame } from '../db/gameHistory';
 
+const NO_ROOM_MSG = '게임이 실행 중이 아닙니다. /avalon create 또는 /avalon start 로 새 게임을 시작하세요.';
+
 // ── 팀 투표 버튼 핸들러 ───────────────────────────────────
 
 export async function handleTeamVoteButton(interaction: ButtonInteraction): Promise<void> {
@@ -27,7 +29,11 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
   if (cidGuild !== guildId || cidChannel !== channelId) return;
 
   const room = getRoom(guildId, channelId);
-  if (!room || room.phase !== 'team_vote') {
+  if (!room) {
+    await interaction.reply({ content: NO_ROOM_MSG, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (room.phase !== 'team_vote') {
     await interaction.reply({ content: '투표가 진행 중이 아닙니다.', flags: MessageFlags.Ephemeral });
     return;
   }
@@ -67,7 +73,9 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
     return;
   }
 
-  // ── 전원 투표 완료 → 결과 처리 ──
+  // ── 전원 투표 완료 → 결과 처리 (중복 실행 방지) ──
+  if (room.isTransitioning) return;
+  room.isTransitioning = true;
 
   const approveCount = Object.values(room.teamVotes).filter((v) => v).length;
   const rejectCount = totalPlayers - approveCount;
@@ -243,7 +251,11 @@ export async function handleQuestVoteButton(interaction: ButtonInteraction): Pro
   }
 
   const room = getRoom(guildId, channelId);
-  if (!room || room.phase !== 'quest_vote') {
+  if (!room) {
+    await interaction.reply({ content: NO_ROOM_MSG, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (room.phase !== 'quest_vote') {
     await interaction.reply({ content: '퀘스트 투표가 진행 중이 아닙니다.', flags: MessageFlags.Ephemeral });
     return;
   }
@@ -371,7 +383,7 @@ export async function handleRestartVoteButton(interaction: ButtonInteraction): P
 
   const room = getRoom(guildId, channelId);
   if (!room) {
-    await interaction.reply({ content: '방이 없습니다.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: NO_ROOM_MSG, flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -519,7 +531,11 @@ export async function handleProposeMenu(interaction: UserSelectMenuInteraction):
   }
 
   const room = getRoom(guildId, channelId);
-  if (!room || room.phase !== 'proposal') {
+  if (!room) {
+    await interaction.update({ content: NO_ROOM_MSG, components: [] });
+    return;
+  }
+  if (room.phase !== 'proposal') {
     await interaction.update({ content: '지금은 팀 제안 단계가 아닙니다.', components: [] });
     return;
   }
