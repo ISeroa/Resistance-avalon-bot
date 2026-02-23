@@ -46,7 +46,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
     return;
   }
 
-  const isApprove = interaction.customId === 'team_approve';
+  const isApprove = interaction.customId.startsWith('team_approve:');
   room.teamVotes[userId] = isApprove;
 
   const voteCount = Object.keys(room.teamVotes).length;
@@ -375,7 +375,7 @@ export async function handleRestartVoteButton(interaction: ButtonInteraction): P
     return;
   }
 
-  const isYes = interaction.customId === 'restart_yes';
+  const isYes = interaction.customId.startsWith('restart_yes:');
   room.restartVotes[userId] = isYes;
 
   await interaction.reply({
@@ -551,11 +551,11 @@ export async function handleProposeMenu(interaction: UserSelectMenuInteraction):
 
   const voteRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('team_approve')
+      .setCustomId(`team_approve:${guildId}:${channelId}`)
       .setLabel('✅ 찬성')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId('team_reject')
+      .setCustomId(`team_reject:${guildId}:${channelId}`)
       .setLabel('❌ 반대')
       .setStyle(ButtonStyle.Danger),
   );

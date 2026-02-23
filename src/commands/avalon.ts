@@ -539,8 +539,8 @@ async function handleRestart(interaction: ChatInputCommandInteraction): Promise<
     .setFooter({ text: '과반 찬성 시 즉시 재시작됩니다.' });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('restart_yes').setLabel('✅ 재시작').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('restart_no').setLabel('❌ 종료').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`restart_yes:${guildId}:${channelId}`).setLabel('✅ 재시작').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`restart_no:${guildId}:${channelId}`).setLabel('❌ 종료').setStyle(ButtonStyle.Danger),
   );
 
   await interaction.reply({ embeds: [embed], components: [row] });

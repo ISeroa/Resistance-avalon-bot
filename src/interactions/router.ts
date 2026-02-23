@@ -34,7 +34,7 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction): Pro
 async function handleButton(interaction: ButtonInteraction): Promise<void> {
   const { customId } = interaction;
 
-  if (customId === 'team_approve' || customId === 'team_reject') {
+  if (customId.startsWith('team_approve:') || customId.startsWith('team_reject:')) {
     await handleTeamVoteButton(interaction);
     return;
   }
@@ -44,7 +44,7 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  if (customId === 'restart_yes' || customId === 'restart_no') {
+  if (customId.startsWith('restart_yes:') || customId.startsWith('restart_no:')) {
     await handleRestartVoteButton(interaction);
     return;
   }
