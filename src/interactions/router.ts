@@ -6,7 +6,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { execute } from '../commands/avalon';
-import { handleTeamVoteButton } from './buttonHandlers';
+import { handleTeamVoteButton, handleQuestVoteButton } from './buttonHandlers';
 
 export async function handleInteraction(interaction: Interaction): Promise<void> {
   if (interaction.isChatInputCommand()) {
@@ -33,6 +33,11 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   if (customId === 'team_approve' || customId === 'team_reject') {
     await handleTeamVoteButton(interaction);
+    return;
+  }
+
+  if (customId.startsWith('quest_success:') || customId.startsWith('quest_fail:')) {
+    await handleQuestVoteButton(interaction);
     return;
   }
 
