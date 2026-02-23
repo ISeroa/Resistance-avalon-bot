@@ -54,6 +54,12 @@
 - [x] 게임 진행 중 leave/cancel 차단
 - [x] status에 퀘스트 기록 표시
 - [x] `/avalon restart` — 재시작 투표 (과반 찬성 시 새 게임)
+- [x] 과거 팀 투표 버튼 차단 (`activeTeamVoteMessageId`)
+- [x] 버튼 customId에 `:{guildId}:{channelId}` 포함, 교차 검증으로 유령 interaction 차단
+- [x] 동시 입력 경쟁 조건 방어 (`isTransitioning` lock — team_vote·quest_vote 모두 적용)
+- [x] 퀘스트 타이머 누수 방지 (`toFinished` 내부 자동 정리, 모든 종료 경로 커버)
+- [x] DM 실패 시 채널 대체 버튼 전송
+- [x] 봇 재시작 후 stale interaction 안내 메시지
 
 ---
 

@@ -132,7 +132,40 @@ game_players (
 
 | customId | 설명 |
 |----------|------|
-| `team_approve` / `team_reject` | 팀 투표 (채널) |
+| `team_approve:{guildId}:{channelId}` | 팀 투표 찬성 (채널) |
+| `team_reject:{guildId}:{channelId}` | 팀 투표 반대 (채널) |
 | `quest_success:{guildId}:{channelId}` | 퀘스트 성공 (DM) |
 | `quest_fail:{guildId}:{channelId}` | 퀘스트 실패 (DM) |
-| `restart_yes` / `restart_no` | 재시작 투표 (채널) |
+| `restart_yes:{guildId}:{channelId}` | 재시작 찬성 (채널) |
+| `restart_no:{guildId}:{channelId}` | 재시작 반대 (채널) |
+
+모든 버튼 핸들러는 customId의 guildId·channelId와 interaction의 guildId·channelId를 교차 검증하여 다른 채널/DM에서 온 잘못된 요청을 차단한다.
+
+---
+
+## 10. 안정성 및 동시성 설계
+
+### isTransitioning 플래그
+
+Node.js 단일 스레드 모델에서도 `await` 구간 사이에 두 핸들러가 교차 실행될 수 있다.
+이를 방지하기 위해 `GameState.isTransitioning` 플래그를 사용한다.
+
+| 설정 (`true`) | 해제 (`false`) |
+|---|---|
+| `handleTeamVoteButton` 전원 투표 결과 처리 진입 | `toQuestVote` |
+| `resolveQuest` 진입 | `toNextRound` |
+| | `toProposalAfterRejection` |
+| | `toAssassination` |
+| | `performRestart` |
+
+`toFinished`는 게임이 종료되므로 해제 불필요.
+
+### activeTeamVoteMessageId
+
+팀 투표 메시지 생성 시 ID를 저장하고, 버튼 클릭 시 현재 메시지 ID와 비교한다.
+과거 팀 투표 메시지의 버튼이 새 투표에 영향을 주지 못하도록 차단한다.
+
+### clearQuestTimer 보장
+
+`toFinished()` 내부에서 `clearQuestTimer`를 직접 호출하므로,
+호출 경로와 무관하게 게임 종료 시 타이머가 반드시 정리된다.

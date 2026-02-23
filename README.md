@@ -79,10 +79,11 @@ Discord.js v14 + TypeScript 기반의
 ## 🧠 설계 원칙
 
 1. guildId + channelId 기준 GameRoom Map 관리 (멀티룸 지원)
-2. 모든 interaction은 phase·권한·중복 검증 필수
+2. 모든 interaction은 phase·권한·중복·세션(customId ↔ guildId/channelId 교차검증) 검증 필수
 3. 비밀 정보(roles, questVotes)는 절대 공개 채널/콘솔 출력 금지
-4. 순수 함수 분리 → vitest 단위 테스트
-5. TypeScript strict 모드 유지
+4. `isTransitioning` + `activeTeamVoteMessageId`로 동시 입력 경쟁 조건 방어
+5. 순수 함수 분리 → vitest 단위 테스트
+6. TypeScript strict 모드 유지
 
 ---
 
