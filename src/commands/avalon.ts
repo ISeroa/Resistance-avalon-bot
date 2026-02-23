@@ -446,6 +446,16 @@ async function handleAssassinate(interaction: ChatInputCommandInteraction): Prom
     return;
   }
 
+  if (target.bot) {
+    await interaction.reply({ content: '봇을 지목할 수 없습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!room.roles.has(target.id)) {
+    await interaction.reply({ content: '유효하지 않은 대상입니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
   clearQuestTimer(guildId, channelId);
   room.phase = 'finished';
 
