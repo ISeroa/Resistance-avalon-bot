@@ -46,6 +46,16 @@ function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
+/** roles 맵에서 암살자의 userId를 반환한다. */
+export function getAssassinId(roles: Map<string, RoleName>): string | undefined {
+  return [...roles.entries()].find(([, r]) => r === 'Assassin')?.[0];
+}
+
+/** roles 맵에서 멀린의 userId를 반환한다. */
+export function getMerlinId(roles: Map<string, RoleName>): string | undefined {
+  return [...roles.entries()].find(([, r]) => r === 'Merlin')?.[0];
+}
+
 /**
  * playerIds 순서대로 역할을 무작위 배정한다.
  */

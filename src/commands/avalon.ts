@@ -8,7 +8,7 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import { hasRoom, createRoom, getRoom, deleteRoom } from '../game/gameManager';
-import { assignRoles, buildDmMessage } from '../game/roles';
+import { assignRoles, buildDmMessage, getAssassinId, getMerlinId, ROLE_INFO } from '../game/roles';
 import { getTeamSize } from '../game/questConfig';
 import { mentionUser } from '../utils/helpers';
 
@@ -48,6 +48,12 @@ export const data = new SlashCommandBuilder()
       .addUserOption((o) => o.setName('m3').setDescription('팀원 3').setRequired(false))
       .addUserOption((o) => o.setName('m4').setDescription('팀원 4').setRequired(false))
       .addUserOption((o) => o.setName('m5').setDescription('팀원 5').setRequired(false)),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('assassinate')
+      .setDescription('멀린을 암살합니다 (암살자 전용)')
+      .addUserOption((o) => o.setName('target').setDescription('암살 대상').setRequired(true)),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -61,7 +67,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     case 'status':  return handleStatus(interaction);
     case 'cancel':  return handleCancel(interaction);
     case 'start':   return handleStart(interaction);
-    case 'propose': return handlePropose(interaction);
+    case 'propose':    return handlePropose(interaction);
+    case 'assassinate': return handleAssassinate(interaction);
   }
 }
 
@@ -400,4 +407,89 @@ async function handlePropose(interaction: ChatInputCommandInteraction): Promise<
   );
 
   await interaction.reply({ embeds: [embed], components: [row] });
+}
+
+async function handleAssassinate(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { guildId, channelId } = interaction;
+  if (!guildId) {
+    await interaction.reply({ content: '이 커맨드는 서버에서만 사용 가능합니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const room = getRoom(guildId, channelId);
+  if (!room) {
+    await interaction.reply({ content: '이 채널에 방이 없습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (room.phase !== 'assassination') {
+    await interaction.reply({ content: '암살 단계가 아닙니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const userId = interaction.user.id;
+  if (room.roles.get(userId) !== 'Assassin') {
+    await interaction.reply({ content: '암살자만 이 커맨드를 사용할 수 있습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const target = interaction.options.getUser('target', true);
+
+  if (target.id === userId) {
+    await interaction.reply({ content: '자신을 지목할 수 없습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!room.players.some((p) => p.id === target.id)) {
+    await interaction.reply({ content: '방 참가자만 지목할 수 있습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  room.phase = 'finished';
+
+  const targetRole = room.roles.get(target.id);
+  const isMerlin = targetRole === 'Merlin';
+  const questRecord = room.questResults.map((r) => (r === 'success' ? '✅' : '❌')).join(' ') || '없음';
+
+  // 게임 종료 시 전원 역할 공개
+  const roleReveal = room.players
+    .map((p) => {
+      const role = room.roles.get(p.id)!;
+      const info = ROLE_INFO[role];
+      return `${mentionUser(p.id)}: ${info.emoji} ${info.displayName}`;
+    })
+    .join('\n');
+
+  if (isMerlin) {
+    const embed = new EmbedBuilder()
+      .setTitle('💀 악의 세력 승리!')
+      .setColor(0x992d22)
+      .setDescription(`암살자가 멀린 ${mentionUser(target.id)}을(를) 찾아냈습니다!\n악의 세력이 최후의 승리를 거뒀습니다.`)
+      .addFields(
+        { name: '퀘스트 기록', value: questRecord },
+        { name: '역할 공개', value: roleReveal },
+      );
+
+    await interaction.reply({ embeds: [embed] });
+
+  } else {
+    const merlinId = getMerlinId(room.roles);
+
+    const embed = new EmbedBuilder()
+      .setTitle('✨ 선의 세력 승리!')
+      .setColor(0x2ecc71)
+      .setDescription('암살자가 멀린을 찾지 못했습니다!\n선의 세력이 승리했습니다.')
+      .addFields(
+        {
+          name: '지목된 플레이어',
+          value: `${mentionUser(target.id)} (${targetRole ? ROLE_INFO[targetRole].displayName : '?'})`,
+          inline: true,
+        },
+        { name: '진짜 멀린', value: merlinId ? mentionUser(merlinId) : '?', inline: true },
+        { name: '퀘스트 기록', value: questRecord },
+        { name: '역할 공개', value: roleReveal },
+      );
+
+    await interaction.reply({ embeds: [embed] });
+  }
 }
