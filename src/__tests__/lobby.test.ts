@@ -69,7 +69,7 @@ describe('참가 (join)', () => {
 
   it('게임이 시작된 방에는 참가 불가', () => {
     const room = getRoom(G, C)!;
-    room.phase = 'in_progress';
+    room.phase = 'proposal';
     expect(room.phase).not.toBe('waiting');
   });
 
