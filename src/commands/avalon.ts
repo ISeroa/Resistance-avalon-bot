@@ -192,6 +192,7 @@ async function handleLeave(interaction: ChatInputCommandInteraction): Promise<vo
   }
 
   room.players = room.players.filter((p) => p.id !== userId);
+  if (room.leaderIndex >= room.players.length) room.leaderIndex = 0;
   await interaction.reply({
     content: `🚪 ${mentionUser(userId)}님이 방에서 나갔습니다. 현재 **${room.players.length}/${MAX_PLAYERS}**명`,
   });
