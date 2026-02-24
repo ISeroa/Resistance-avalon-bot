@@ -60,6 +60,8 @@
 - [x] 퀘스트 타이머 누수 방지 (`toFinished` 내부 자동 정리, 모든 종료 경로 커버)
 - [x] DM 실패 시 채널 대체 버튼 전송
 - [x] 봇 재시작 후 stale interaction 안내 메시지
+- [x] `handleProposeMenu` null window 제거 — `room.phase='team_vote'`를 `voteMsg.id` 저장 직후로 이동, send 실패 시 proposal 롤백
+- [x] DESIGN.md 섹션 11·12 추가 — 단계별 커맨드 접근 표, 단계 전환별 필드 리셋 보장 표
 
 ---
 
