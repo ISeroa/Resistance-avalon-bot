@@ -563,7 +563,6 @@ export async function handleProposeMenu(interaction: UserSelectMenuInteraction):
 
   room.currentTeam = selectedIds;
   room.teamVotes = {};
-  room.phase = 'team_vote';
 
   // 에페머럴 메시지 완료 처리
   await interaction.update({ content: '✅ 팀 구성이 제안되었습니다.', components: [] });
@@ -595,7 +594,14 @@ export async function handleProposeMenu(interaction: UserSelectMenuInteraction):
 
   const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
   if (channel?.isTextBased() && channel.type !== ChannelType.GroupDM) {
-    const voteMsg = await channel.send({ embeds: [embed], components: [voteRow] });
-    room.activeTeamVoteMessageId = voteMsg.id;
+    try {
+      const voteMsg = await channel.send({ embeds: [embed], components: [voteRow] });
+      room.activeTeamVoteMessageId = voteMsg.id;
+      room.phase = 'team_vote';
+    } catch {
+      room.currentTeam = [];
+    }
+  } else {
+    room.currentTeam = [];
   }
 }
