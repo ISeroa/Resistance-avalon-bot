@@ -62,6 +62,7 @@
 - [x] 봇 재시작 후 stale interaction 안내 메시지
 - [x] `handleProposeMenu` null window 제거 — `room.phase='team_vote'`를 `voteMsg.id` 저장 직후로 이동, send 실패 시 proposal 롤백
 - [x] `handleTeamVoteButton` progress edit 역전 방지 — `await reply()` 이후 phase·messageId 가드 추가, 결과 embed 덮어쓰기 차단
+- [x] `handleTeamVoteButton` `isTransitioning` 미해제 수정 — try/finally로 5연속 부결→finished 경로 포함 전 경로 lock 해제 보장
 - [x] DESIGN.md 섹션 11·12 추가 — 단계별 커맨드 접근 표, 단계 전환별 필드 리셋 보장 표
 
 ---
