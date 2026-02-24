@@ -85,6 +85,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
 
   if (approved) {
     toQuestVote(room);
+    room.questSessionId++;
     const teamMentions = room.currentTeam.map(mentionUser).join(', ');
 
     const dmFailed = await sendQuestVoteDms(interaction, room, guildId, channelId);
@@ -307,6 +308,7 @@ async function resolveQuest(
   if (room.phase !== 'quest_vote') return;
   if (room.isTransitioning) return;
   room.isTransitioning = true;
+  const sid = room.questSessionId;
   clearQuestTimer(guildId, channelId);
 
   const failCount = Object.values(room.questVotes).filter((v) => !v).length;
@@ -331,6 +333,7 @@ async function resolveQuest(
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased() || channel.type === ChannelType.GroupDM) return;
+  if (room.questSessionId !== sid) return;
 
   if (winState === 'evil_wins') {
     const embed = new EmbedBuilder()
@@ -478,6 +481,7 @@ async function performRestart(
   room.questVotes = {};
   room.activeTeamVoteMessageId = null;
   room.isTransitioning = false;
+  room.questSessionId++;
 
   const dmFailed: string[] = [];
   await Promise.all(
