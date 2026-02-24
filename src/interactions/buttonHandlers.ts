@@ -67,6 +67,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
   });
 
   if (voteCount < totalPlayers) {
+    if (room.phase !== 'team_vote' || interaction.message.id !== room.activeTeamVoteMessageId) return;
     await interaction.message.edit({
       content: `🗳️ 투표 진행 중... **${voteCount}/${totalPlayers}**명 완료`,
     });
