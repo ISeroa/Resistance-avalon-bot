@@ -78,6 +78,7 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
   if (room.isTransitioning) return;
   room.isTransitioning = true;
 
+  try {
   const approveCount = Object.values(room.teamVotes).filter((v) => v).length;
   const rejectCount = totalPlayers - approveCount;
   const approved = isMajorityApprove(room.teamVotes, totalPlayers);
@@ -191,6 +192,9 @@ export async function handleTeamVoteButton(interaction: ButtonInteraction): Prom
         });
       }
     }
+  }
+  } finally {
+    room.isTransitioning = false;
   }
 }
 
