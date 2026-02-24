@@ -169,3 +169,43 @@ Node.js 단일 스레드 모델에서도 `await` 구간 사이에 두 핸들러�
 
 `toFinished()` 내부에서 `clearQuestTimer`를 직접 호출하므로,
 호출 경로와 무관하게 게임 종료 시 타이머가 반드시 정리된다.
+
+---
+
+## 11. 단계별 커맨드 접근
+
+각 서브커맨드가 허용되는 phase. ✅ = 허용, ❌ = 차단.
+
+| 커맨드 | waiting | proposal | team_vote | quest_vote | assassination | finished | 비고 |
+|--------|:-------:|:--------:|:---------:|:----------:|:-------------:|:--------:|------|
+| `ping` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| `create` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 방이 없을 때만 가능 (phase 무관) |
+| `join` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | |
+| `leave` | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | |
+| `status` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| `cancel` | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ | 방장 전용 |
+| `start` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | 방장 전용, 최소 5명 |
+| `propose` | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | 현재 리더 전용 |
+| `assassinate` | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | 암살자 전용 |
+| `restart` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | 참가자 전용, 중복 불가 |
+| `history` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
+| `stats` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
+
+> `leave` / `cancel`은 게임 진행 중(`proposal`~`assassination`) 차단되며, 재시작하려면 `/avalon restart`를 사용해야 한다.
+
+---
+
+## 12. 단계 전환별 필드 리셋 보장
+
+각 전환 함수(`transitions.ts`)가 초기화하는 GameState 필드.
+
+| 전환 | `proposalNumber` | `teamVotes` | `questVotes` | `currentTeam` | `activeTeamVoteMessageId` | `isTransitioning` |
+|------|:----------------:|:-----------:|:------------:|:-------------:|:-------------------------:|:-----------------:|
+| `proposal → team_vote` (`handleProposeMenu`) | — | ✅ 초기화 | — | ✅ 저장 | ✅ 저장 | — |
+| `team_vote → quest_vote` (`toQuestVote`) | — | ✅ 초기화 | ✅ 초기화 | — | ✅ null | ✅ false |
+| `team_vote → proposal` 부결 (`toProposalAfterRejection`) | ✅ +1 | ✅ 초기화 | — | ✅ 초기화 | ✅ null | ✅ false |
+| `quest_vote → proposal` 다음 라운드 (`toNextRound`) | ✅ =0 | ✅ 초기화 | ✅ 초기화 | ✅ 초기화 | ✅ null | ✅ false |
+| `quest_vote → assassination` (`toAssassination`) | — | ✅ 초기화 | ✅ 초기화 | ✅ 초기화 | ✅ null | ✅ false |
+| 재시작 (`performRestart`) | ✅ =0 | ✅ 초기화 | ✅ 초기화 | ✅ 초기화 | ✅ null | ✅ false |
+
+> `toFinished`는 게임이 종료되므로 `isTransitioning` 해제 및 필드 초기화 불필요.
