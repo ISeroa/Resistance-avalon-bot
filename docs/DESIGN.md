@@ -157,8 +157,9 @@ Node.js 단일 스레드 모델에서도 `await` 구간 사이에 두 핸들러�
 | | `toProposalAfterRejection` |
 | | `toAssassination` |
 | | `performRestart` |
+| | `handleTeamVoteButton` try/finally (모든 경로 보장) |
 
-`toFinished`는 게임이 종료되므로 해제 불필요.
+`toFinished`를 포함한 모든 경로는 `handleTeamVoteButton`의 try/finally가 최종 해제를 보장한다.
 
 ### activeTeamVoteMessageId
 
@@ -169,6 +170,20 @@ Node.js 단일 스레드 모델에서도 `await` 구간 사이에 두 핸들러�
 
 `toFinished()` 내부에서 `clearQuestTimer`를 직접 호출하므로,
 호출 경로와 무관하게 게임 종료 시 타이머가 반드시 정리된다.
+
+### questSessionId
+
+`performRestart`와 `resolveQuest`의 교차 실행을 방지하기 위한 세션 카운터.
+
+| increment 시점 | 위치 |
+|---|---|
+| 새 퀘스트 세션 시작 | `toQuestVote(room)` 직후 (`handleTeamVoteButton`) |
+| 게임 재시작 | `performRestart` 첫 `await` 이전 |
+
+`resolveQuest`는 진입 시 `sid = room.questSessionId`를 캡처하고,
+첫 `await`(`channel.fetch`) 이후 `sid !== room.questSessionId`이면 즉시 return한다.
+이로써 restart가 진행 중인 resolveQuest를 무효화하고, 구 퀘스트 결과 embed가
+재시작 embed 이후 채널에 출력되는 현상을 방지한다.
 
 ---
 
