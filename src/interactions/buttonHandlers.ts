@@ -15,6 +15,7 @@ import { ROLE_INFO, assignRoles, buildDmMessage } from '../game/roles';
 import { GameState } from '../game/GameState';
 import { setQuestTimer, clearQuestTimer, QUEST_TIMEOUT_MS } from '../game/timerManager';
 import { toQuestVote, toProposalAfterRejection, toNextRound, toAssassination, toFinished } from '../game/transitions';
+import { ensureCleanupTimer } from '../game/activity';
 import { mentionUser } from '../utils/helpers';
 import { saveGame } from '../db/gameHistory';
 
@@ -332,6 +333,12 @@ async function resolveQuest(
     } else {
       toNextRound(room);
     }
+
+    // bot-triggered 경로(quest 타임아웃 콜백)에서는 router를 거치지 않으므로
+    // 새 phase 기준으로 정리 타이머를 여기서 직접 설정한다.
+    // user-triggered 경로에서는 router의 tryMarkActivity가 이후에 한 번 더
+    // 호출되지만, 동일 phase에 대해 타이머를 재설정하는 것이므로 무해하다.
+    ensureCleanupTimer(room, client);
 
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!channel?.isTextBased() || channel.type === ChannelType.GroupDM) return;

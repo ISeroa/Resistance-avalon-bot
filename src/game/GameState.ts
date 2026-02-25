@@ -39,6 +39,10 @@ export interface GameState {
   activeTeamVoteMessageId: string | null; // 현재 팀 투표 메시지 ID
   isTransitioning: boolean;               // 상태 전환 중 중복 처리 방지 lock
   questSessionId: number;                 // 퀘스트 세션 식별자 (resolveQuest vs performRestart 교차 실행 방지)
+
+  // Auto-cancel (무조작 방 정리)
+  lastActivityAt: number;                              // 마지막 사용자 조작 시각 (Unix ms)
+  cleanupTimer: ReturnType<typeof setTimeout> | null;  // 방 자동 정리 타이머 핸들
 }
 
 export function createGameState(
@@ -66,5 +70,7 @@ export function createGameState(
     activeTeamVoteMessageId: null,
     isTransitioning: false,
     questSessionId: 0,
+    lastActivityAt: Date.now(),
+    cleanupTimer: null,
   };
 }

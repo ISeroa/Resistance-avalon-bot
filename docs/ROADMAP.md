@@ -96,6 +96,24 @@
 
 ---
 
+## Phase 11 - Auto-cancel (무조작 방 자동 정리) ✅
+- [x] `waiting` 상태 10분 무조작 → 방 자동 삭제 + 채널 안내 메시지
+- [x] `finished` 상태 3분 무조작 → 방 자동 삭제 + 채널 안내 메시지
+- [x] 진행 중 상태(`proposal`~`assassination`)에서는 자동 정리 없음
+- [x] `GameState`에 `lastActivityAt`(Unix ms), `cleanupTimer`(타이머 핸들) 필드 추가
+- [x] `game/timerManager.ts` — `LOBBY_CLEANUP_MS`(10분), `FINISHED_CLEANUP_MS`(3분), `clearCleanupTimer(room)` 추가
+- [x] `game/activity.ts` 신규
+  - `ensureCleanupTimer(room, client)` — phase 기준으로 타이머 1개 유지 (항상 기존 타이머 먼저 제거)
+  - `markActivity(room, client)` — `lastActivityAt` 갱신 + `ensureCleanupTimer` 호출
+- [x] `gameManager.deleteRoom()` — 삭제 전 `clearCleanupTimer(room)` 호출로 타이머 누수 방지
+- [x] `router.ts` — 모든 interaction 처리 후 `tryMarkActivity()` 호출
+  - DM 버튼(퀘스트 투표)은 `customId`에서 guildId·channelId 파싱
+- [x] `buttonHandlers.resolveQuest()` — bot-triggered 상태 전환 후 `ensureCleanupTimer` 직접 호출 (router 미경유 경로 대응)
+- [x] `src/__tests__/activity.test.ts` 신규 — 16개 테스트
+  - 타임아웃 상수 검증, phase별 타이머 설정 여부, 타이머 단일성(중복 없음), markActivity 리셋, 콜백 안전 조건
+
+---
+
 ## 향후 확장 아이디어
 - [ ] 진행 중 게임 상태 DB 저장 (봇 재시작 복구)
 - [ ] 라운드별 상세 기록 저장 (팀 구성, 투표 결과)

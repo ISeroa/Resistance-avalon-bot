@@ -42,6 +42,10 @@ interface GameState {
   teamVotes: Record<string, boolean>  // true=찬성
   questVotes: Record<string, boolean> // true=성공 — 절대 채널 출력 금지
   restartVotes: Record<string, boolean>
+
+  // Auto-cancel (무조작 방 자동 정리)
+  lastActivityAt: number                              // 마지막 사용자 조작 시각 (Unix ms)
+  cleanupTimer: ReturnType<typeof setTimeout> | null  // 방 자동 정리 타이머 핸들
 }
 ```
 
@@ -85,10 +89,27 @@ interface GameState {
 
 ## 6. 타임아웃 (timerManager.ts)
 
+### 퀘스트 투표 타임아웃 (Quest Timer)
+
 - 팀 구성 통과 시 5분 타이머 시작
 - 전원 투표 완료 시 타이머 취소
 - 5분 경과 시 미투표자 → `true`(성공) 자동 처리 후 결과 집계
 - 게임 재시작 시 타이머 취소
+- 구현: `questTimers: Map<roomKey, Timeout>` (guildId+channelId 키)
+
+### 방 자동 정리 타임아웃 (Cleanup Timer)
+
+- 구현: `GameState.cleanupTimer` 필드에 직접 저장 (별도 Map 불필요)
+- phase별 타임아웃:
+
+| phase | 타임아웃 | 상수 |
+|-------|---------|------|
+| `waiting` | 10분 | `LOBBY_CLEANUP_MS` |
+| `finished` | 3분 | `FINISHED_CLEANUP_MS` |
+| 그 외 (진행 중) | 없음 | — |
+
+- `clearCleanupTimer(room)`: `room.cleanupTimer`를 clearTimeout 후 null로 초기화
+- `deleteRoom()` 내부에서 자동 호출되므로 수동 삭제 시에도 타이머가 누수되지 않음
 
 ---
 
@@ -187,7 +208,63 @@ Node.js 단일 스레드 모델에서도 `await` 구간 사이에 두 핸들러�
 
 ---
 
-## 11. 단계별 커맨드 접근
+## 11. 무조작 방 자동 정리 (Auto-cancel)
+
+### 정책
+
+| phase | 조건 | 동작 |
+|-------|------|------|
+| `waiting` | 10분 무조작 | 방 삭제 + 채널 안내 메시지 |
+| `finished` | 3분 무조작 | 방 삭제 + 채널 안내 메시지 |
+| 진행 중 (`proposal`~`assassination`) | — | 자동 정리 없음 |
+
+### "조작(activity)"의 정의
+
+다음 세 종류의 interaction이 activity로 인정된다. 봇이 자체적으로 상태를 전환하며 메시지를 출력하는 것은 **activity로 취급하지 않는다**.
+
+- Slash command 실행
+- Button interaction
+- SelectMenu interaction (UserSelectMenu 포함)
+
+### 데이터 흐름
+
+```
+사용자 조작 (slash / button / select)
+  → router.handleInteraction()
+      → [핸들러 실행 — 상태 전환 완료]
+      → tryMarkActivity()
+          → markActivity(room, client)          ← lastActivityAt 갱신
+              → ensureCleanupTimer(room, client) ← 현재 phase 기준 타이머 재설정
+
+bot-triggered 전환 (quest 타임아웃 콜백 등, router 미경유)
+  → resolveQuest() 내 상태 전환 후
+      → ensureCleanupTimer(room, client)        ← 직접 호출
+```
+
+### 타이머 단일성 보장
+
+`ensureCleanupTimer`는 첫 줄에서 `clearCleanupTimer(room)`을 **항상** 호출한다.
+따라서 몇 번을 연속 호출해도 `room.cleanupTimer`에는 최대 1개의 타이머만 존재한다.
+
+### 자동 정리 콜백 안전 조건
+
+타이머가 발화할 때 아래 조건 중 하나라도 해당하면 삭제를 취소한다.
+
+1. `getRoom(guildId, channelId)` → `undefined` (이미 수동 삭제됨)
+2. `room.phase`가 진행 중 phase로 변경됨 (게임이 시작됨)
+
+### 관련 파일
+
+| 파일 | 역할 |
+|------|------|
+| `game/timerManager.ts` | `LOBBY_CLEANUP_MS`, `FINISHED_CLEANUP_MS`, `clearCleanupTimer(room)` |
+| `game/activity.ts` | `ensureCleanupTimer(room, client)`, `markActivity(room, client)` |
+| `interactions/router.ts` | `tryMarkActivity()` — 모든 interaction 후 호출 |
+| `interactions/buttonHandlers.ts` | `resolveQuest` 내 bot-triggered 전환 후 `ensureCleanupTimer` 직접 호출 |
+
+---
+
+## 12. 단계별 커맨드 접근
 
 각 서브커맨드가 허용되는 phase. ✅ = 허용, ❌ = 차단.
 
@@ -211,7 +288,7 @@ Node.js 단일 스레드 모델에서도 `await` 구간 사이에 두 핸들러�
 
 ---
 
-## 12. 단계 전환별 필드 리셋 보장
+## 13. 단계 전환별 필드 리셋 보장
 
 각 전환 함수(`transitions.ts`)가 초기화하는 GameState 필드.
 
