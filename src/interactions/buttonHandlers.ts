@@ -307,78 +307,83 @@ async function resolveQuest(
   // guard: 타임아웃 콜백과 마지막 투표가 겹칠 때 중복 실행 방지
   if (room.phase !== 'quest_vote') return;
   if (room.isTransitioning) return;
+
   room.isTransitioning = true;
-  const sid = room.questSessionId;
-  clearQuestTimer(guildId, channelId);
+  try {
+    const sid = room.questSessionId;
+    clearQuestTimer(guildId, channelId);
 
-  const failCount = Object.values(room.questVotes).filter((v) => !v).length;
-  const failed = isQuestFailed(failCount, room.players.length, room.round);
-  const result = failed ? 'fail' : 'success';
+    const failCount = Object.values(room.questVotes).filter((v) => !v).length;
+    const failed = isQuestFailed(failCount, room.players.length, room.round);
+    const result = failed ? 'fail' : 'success';
 
-  room.questResults.push(result);
+    room.questResults.push(result);
 
-  const winState = checkWinCondition(room.questResults);
-  const questRecord = room.questResults.map((r) => (r === 'success' ? '✅' : '❌')).join(' ');
+    const winState = checkWinCondition(room.questResults);
+    const questRecord = room.questResults.map((r) => (r === 'success' ? '✅' : '❌')).join(' ');
 
-  // ── 상태 변경을 첫 await 이전에 모두 완료 ──
-  // 이 시점 이후 두 번째 호출이 들어오면 위 phase guard에서 차단됨
-  if (winState === 'evil_wins') {
-    toFinished(room);
-    saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
-  } else if (winState === 'good_wins_assassination') {
-    toAssassination(room);
-  } else {
-    toNextRound(room);
-  }
+    // ── 상태 변경을 첫 await 이전에 모두 완료 ──
+    // 이 시점 이후 두 번째 호출이 들어오면 위 phase guard에서 차단됨
+    if (winState === 'evil_wins') {
+      toFinished(room);
+      saveGame({ room, winner: 'evil', endReason: 'quests_evil' });
+    } else if (winState === 'good_wins_assassination') {
+      toAssassination(room);
+    } else {
+      toNextRound(room);
+    }
 
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased() || channel.type === ChannelType.GroupDM) return;
-  if (room.questSessionId !== sid) return;
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel?.isTextBased() || channel.type === ChannelType.GroupDM) return;
+    if (room.questSessionId !== sid) return;
 
-  if (winState === 'evil_wins') {
+    if (winState === 'evil_wins') {
+      const embed = new EmbedBuilder()
+        .setTitle('💀 악의 세력 승리!')
+        .setColor(0x992d22)
+        .setDescription('퀘스트가 3번 실패했습니다. 악의 세력이 승리했습니다!')
+        .addFields(
+          { name: '퀘스트 기록', value: questRecord },
+          { name: '실패 투표', value: `${failCount}표`, inline: true },
+        );
+
+      await channel.send({ embeds: [embed] });
+      return;
+    }
+
+    if (winState === 'good_wins_assassination') {
+      const embed = new EmbedBuilder()
+        .setTitle('🗡️ 암살 단계 시작')
+        .setColor(0xe74c3c)
+        .setDescription(
+          '퀘스트 3번 성공!\n암살자는 `/avalon assassinate`로 멀린을 지목하세요.\n(암살자는 역할 DM을 확인하세요.)',
+        )
+        .addFields({ name: '퀘스트 기록', value: questRecord });
+
+      await channel.send({ embeds: [embed] });
+      return;
+    }
+
+    // ── 다음 라운드 (state는 위에서 이미 변경됨) ──
+    const nextLeader = room.players[room.leaderIndex]!;
+    const teamSize = getTeamSize(room.players.length, room.round);
+
     const embed = new EmbedBuilder()
-      .setTitle('💀 악의 세력 승리!')
-      .setColor(0x992d22)
-      .setDescription('퀘스트가 3번 실패했습니다. 악의 세력이 승리했습니다!')
+      .setTitle(failed ? '❌ 퀘스트 실패' : '✅ 퀘스트 성공')
+      .setColor(failed ? 0xe74c3c : 0x2ecc71)
+      .setDescription(`${mentionUser(nextLeader.id)}님이 \`/avalon propose\`로 팀원을 제안하세요.`)
       .addFields(
-        { name: '퀘스트 기록', value: questRecord },
         { name: '실패 투표', value: `${failCount}표`, inline: true },
-      );
-
-    await channel.send({ embeds: [embed] });
-    return;
-  }
-
-  if (winState === 'good_wins_assassination') {
-    const embed = new EmbedBuilder()
-      .setTitle('🗡️ 암살 단계 시작')
-      .setColor(0xe74c3c)
-      .setDescription('퀘스트 3번 성공!\n암살자는 `/avalon assassinate`로 멀린을 지목하세요.\n(암살자는 역할 DM을 확인하세요.)')
-      .addFields(
         { name: '퀘스트 기록', value: questRecord },
+        { name: '다음 라운드', value: `${room.round} / 5`, inline: true },
+        { name: '다음 리더 👑', value: mentionUser(nextLeader.id), inline: true },
+        { name: '팀 크기', value: `${teamSize}명`, inline: true },
       );
 
     await channel.send({ embeds: [embed] });
-    return;
+  } finally {
+    room.isTransitioning = false;
   }
-
-  // ── 다음 라운드 (state는 위에서 이미 변경됨) ──
-  const nextLeader = room.players[room.leaderIndex]!;
-  const teamSize = getTeamSize(room.players.length, room.round);
-
-  const embed = new EmbedBuilder()
-    .setTitle(failed ? '❌ 퀘스트 실패' : '✅ 퀘스트 성공')
-    .setColor(failed ? 0xe74c3c : 0x2ecc71)
-    .setDescription(`${mentionUser(nextLeader.id)}님이 \`/avalon propose\`로 팀원을 제안하세요.`)
-    .addFields(
-      { name: '실패 투표', value: `${failCount}표`, inline: true },
-      { name: '퀘스트 기록', value: questRecord },
-      { name: '다음 라운드', value: `${room.round} / 5`, inline: true },
-      { name: '다음 리더 👑', value: mentionUser(nextLeader.id), inline: true },
-      { name: '팀 크기', value: `${teamSize}명`, inline: true },
-    );
-
-  await channel.send({ embeds: [embed] });
 }
 
 // ── 재시작 투표 버튼 핸들러 ───────────────────────────────

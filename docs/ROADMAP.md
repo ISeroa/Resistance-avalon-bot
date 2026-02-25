@@ -83,6 +83,19 @@
 
 ---
 
+## Phase 10 - Rules & Test 정비 ✅
+- [x] `/avalon rules [type]` — 기본 규칙·역할 소개·승리 조건 조회 (ephemeral embed)
+  - `type` 옵션: `basic`(기본값) / `roles` / `win`
+  - 방 조회 없음, 어떤 phase에서도 DM에서도 사용 가능
+- [x] `src/game/rules.ts` 신규 — `BASIC_RULES` / `ROLE_RULES` / `WIN_RULES` 문자열 상수 분리
+  - embed description으로 바로 사용 가능한 포맷
+  - `avalon.ts`에서 `RULES_META`로 title·color·description 매핑 후 `EmbedBuilder` 조립
+- [x] `vitest.config.ts` 신규 — `include: ['src/**/*.test.ts']` 명시
+  - `dist/__tests__/*.js` 중복 스캔 제거, 테스트 실행 시간 3.09s → 1.17s 개선
+- [x] DESIGN.md 섹션 11 갱신 — `rules` 커맨드 행 추가
+
+---
+
 ## 향후 확장 아이디어
 - [ ] 진행 중 게임 상태 DB 저장 (봇 재시작 복구)
 - [ ] 라운드별 상세 기록 저장 (팀 구성, 투표 결과)

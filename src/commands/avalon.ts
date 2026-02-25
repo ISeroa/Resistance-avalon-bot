@@ -10,6 +10,7 @@ import {
   ChannelType,
 } from 'discord.js';
 import { hasRoom, createRoom, getRoom, deleteRoom } from '../game/gameManager';
+import { BASIC_RULES, ROLE_RULES, WIN_RULES } from '../game/rules';
 import { assignRoles, buildDmMessage, getAssassinId, getMerlinId, ROLE_INFO } from '../game/roles';
 import { getTeamSize } from '../game/questConfig';
 import { clearQuestTimer } from '../game/timerManager';
@@ -66,6 +67,22 @@ export const data = new SlashCommandBuilder()
       .setName('stats')
       .setDescription('플레이어의 전적을 조회합니다')
       .addUserOption((o) => o.setName('user').setDescription('조회할 플레이어 (생략 시 본인)').setRequired(false)),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('rules')
+      .setDescription('아발론 게임 규칙을 확인합니다')
+      .addStringOption((o) =>
+        o
+          .setName('type')
+          .setDescription('규칙 종류 (기본값: basic)')
+          .setRequired(false)
+          .addChoices(
+            { name: '기본 규칙', value: 'basic' },
+            { name: '역할 소개', value: 'roles' },
+            { name: '승리 조건', value: 'win' },
+          ),
+      ),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -84,6 +101,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     case 'restart':     return handleRestart(interaction);
     case 'history':     return handleHistory(interaction);
     case 'stats':       return handleStats(interaction);
+    case 'rules':       return handleRules(interaction);
   }
 }
 
@@ -637,4 +655,19 @@ async function handleStats(interaction: ChatInputCommandInteraction): Promise<vo
     );
 
   await interaction.reply({ embeds: [embed] });
+}
+
+// ── rules ─────────────────────────────────────────────────
+
+const RULES_META: Record<'basic' | 'roles' | 'win', { title: string; color: number; description: string }> = {
+  basic: { title: '📖 아발론 기본 규칙', color: 0x5865f2, description: BASIC_RULES },
+  roles: { title: '🎭 아발론 역할 소개', color: 0xe67e22, description: ROLE_RULES },
+  win:   { title: '🏆 아발론 승리 조건', color: 0xf1c40f, description: WIN_RULES },
+};
+
+async function handleRules(interaction: ChatInputCommandInteraction): Promise<void> {
+  const type = (interaction.options.getString('type') ?? 'basic') as 'basic' | 'roles' | 'win';
+  const { title, color, description } = RULES_META[type];
+  const embed = new EmbedBuilder().setTitle(title).setColor(color).setDescription(description);
+  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
