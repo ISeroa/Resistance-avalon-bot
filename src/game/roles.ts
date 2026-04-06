@@ -8,6 +8,69 @@ export type RoleName =
   | 'Oberon'
   | 'Minion'; // 모드레드의 부하 (일반 악)
 
+// ── RoleConfig (방별 역할 설정, MVP 범위: Merlin/Assassin/LoyalServant/Minion) ──
+
+export type RoleConfig = {
+  merlin: number;
+  assassin: number;
+  loyal: number;  // LoyalServant 수
+  minion: number; // Minion 수
+};
+
+/** 인원수별 기본 역할 설정 (5~10인). 원본 수정 방지를 위해 Readonly. */
+export const DEFAULT_ROLE_TABLE: Readonly<Record<number, Readonly<RoleConfig>>> = {
+  5:  { merlin: 1, assassin: 1, loyal: 2, minion: 1 },
+  6:  { merlin: 1, assassin: 1, loyal: 3, minion: 1 },
+  7:  { merlin: 1, assassin: 1, loyal: 3, minion: 2 },
+  8:  { merlin: 1, assassin: 1, loyal: 4, minion: 2 },
+  9:  { merlin: 1, assassin: 1, loyal: 5, minion: 2 },
+  10: { merlin: 1, assassin: 1, loyal: 6, minion: 2 },
+};
+
+/**
+ * 인원수에 맞는 기본 RoleConfig 복사본을 반환한다.
+ * 반환값은 원본 테이블과 독립된 복사본이므로 직접 수정해도 안전하다.
+ */
+export function getDefaultRoleConfig(playerCount: number): RoleConfig {
+  const cfg = DEFAULT_ROLE_TABLE[playerCount];
+  if (!cfg) throw new Error(`지원하지 않는 인원수: ${playerCount}`);
+  return { ...cfg };
+}
+
+/**
+ * RoleConfig 유효성 검증.
+ * @returns 오류 메시지(string) 또는 유효하면 null
+ */
+export function validateRoleConfig(config: RoleConfig, playerCount: number): string | null {
+  const total = config.merlin + config.assassin + config.loyal + config.minion;
+  if (total !== playerCount) {
+    return `역할 총합(${total})이 현재 플레이어 수(${playerCount})와 일치하지 않습니다.`;
+  }
+  if (config.merlin !== 1) return '멀린은 정확히 1명이어야 합니다.';
+  if (config.assassin !== 1) return '암살자는 정확히 1명이어야 합니다.';
+  if (config.loyal < 0) return '아서의 충신 수는 0 이상이어야 합니다.';
+  if (config.minion < 0) return '모드레드의 부하 수는 0 이상이어야 합니다.';
+  return null;
+}
+
+/** RoleConfig를 기반으로 역할 풀(Role[])을 생성한다. */
+export function buildRolePool(config: RoleConfig): RoleName[] {
+  const pool: RoleName[] = [];
+  for (let i = 0; i < config.merlin; i++) pool.push('Merlin');
+  for (let i = 0; i < config.assassin; i++) pool.push('Assassin');
+  for (let i = 0; i < config.loyal; i++) pool.push('LoyalServant');
+  for (let i = 0; i < config.minion; i++) pool.push('Minion');
+  return pool;
+}
+
+/** RoleConfig 기반으로 역할을 무작위 배정한다. */
+export function assignRolesFromConfig(playerIds: string[], config: RoleConfig): Map<string, RoleName> {
+  const shuffled = shuffle(buildRolePool(config));
+  const result = new Map<string, RoleName>();
+  playerIds.forEach((id, i) => result.set(id, shuffled[i]!));
+  return result;
+}
+
 export type Alignment = 'good' | 'evil';
 
 export interface RoleInfo {

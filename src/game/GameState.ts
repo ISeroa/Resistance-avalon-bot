@@ -1,4 +1,4 @@
-import { RoleName } from './roles';
+import { RoleName, RoleConfig } from './roles';
 
 export type GamePhase =
   | 'waiting'      // 로비 대기 중
@@ -25,6 +25,9 @@ export interface GameState {
 
   // Phase 3: 역할 배정 (절대 채널에 출력 금지)
   roles: Map<string, RoleName>;
+
+  // 방별 역할 설정 (null이면 게임 시작 시 기본 테이블로 초기화)
+  roleConfig: RoleConfig | null;
 
   // Phase 4+: 게임 진행
   round: number;           // 현재 라운드 (1~5)
@@ -58,6 +61,7 @@ export function createGameState(
     players: [],
     createdAt: new Date(),
     roles: new Map(),
+    roleConfig: null,
     round: 0,
     leaderIndex: 0,
     proposalNumber: 0,

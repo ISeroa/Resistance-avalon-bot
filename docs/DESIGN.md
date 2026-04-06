@@ -34,6 +34,7 @@ interface GameState {
   createdAt: Date
 
   roles: Map<string, RoleName>        // 절대 채널 출력 금지
+  roleConfig: RoleConfig | null       // 방별 역할 설정 (null이면 게임 시작 시 기본값 자동 적용)
   round: number                       // 1~5
   leaderIndex: number                 // players 배열 인덱스
   proposalNumber: number              // 현재 라운드 제안 횟수 (5회 부결 → 악 승)
@@ -51,7 +52,62 @@ interface GameState {
 
 ---
 
-## 3. 역할 지식 규칙
+## 3. RoleConfig 시스템
+
+### 개요
+
+각 방은 독립된 `RoleConfig`를 가진다. 방장이 LOBBY 상태에서 `/avalon role-config`로 수정할 수 있으며, 게임 시작 시 이 설정을 기반으로 역할을 배정한다.
+
+```ts
+type RoleConfig = {
+  merlin: number;    // 멀린 수 (항상 1)
+  assassin: number;  // 암살자 수 (항상 1)
+  loyal: number;     // LoyalServant 수 (0 이상)
+  minion: number;    // Minion 수 (0 이상)
+};
+```
+
+### 기본 역할 테이블 (`DEFAULT_ROLE_TABLE`)
+
+MVP 범위(Merlin / Assassin / LoyalServant / Minion)로 구성된 기본값. 방 생성 시 `roleConfig`는 `null`이며, 게임 시작 직전 기본 테이블의 **복사본**이 자동 적용된다.
+
+| 인원 | Merlin | Assassin | LoyalServant | Minion | 선/악 |
+|------|:------:|:--------:|:------------:|:------:|:-----:|
+| 5    | 1      | 1        | 2            | 1      | 3 / 2 |
+| 6    | 1      | 1        | 3            | 1      | 4 / 2 |
+| 7    | 1      | 1        | 3            | 2      | 4 / 3 |
+| 8    | 1      | 1        | 4            | 2      | 5 / 3 |
+| 9    | 1      | 1        | 5            | 2      | 6 / 3 |
+| 10   | 1      | 1        | 6            | 2      | 7 / 3 |
+
+### 검증 규칙 (`validateRoleConfig`)
+
+| 조건 | 오류 |
+|------|------|
+| 총합 ≠ 현재 플레이어 수 | "역할 총합(N)이 현재 플레이어 수(M)와 일치하지 않습니다." |
+| `merlin !== 1` | "멀린은 정확히 1명이어야 합니다." |
+| `assassin !== 1` | "암살자는 정확히 1명이어야 합니다." |
+| `loyal < 0` | "아서의 충신 수는 0 이상이어야 합니다." |
+| `minion < 0` | "모드레드의 부하 수는 0 이상이어야 합니다." |
+
+### 역할 배정 흐름 (`handleStart`)
+
+```
+room.roleConfig === null
+  → getDefaultRoleConfig(playerCount)로 복사본 초기화
+validateRoleConfig(config, playerCount)
+  → 오류 시 게임 시작 거부 (ephemeral 오류 메시지)
+assignRolesFromConfig(playerIds, config)
+  → buildRolePool(config) → shuffle → 플레이어에 매핑
+```
+
+### 확장 고려사항
+
+`RoleConfig`에 `percival`, `morgana` 등 필드를 추가하고 `buildRolePool`·`validateRoleConfig`를 확장하는 것만으로 새 역할을 지원할 수 있다. 기존 `ROLE_TABLES` / `assignRoles`는 그대로 유지된다.
+
+---
+
+## 4. 역할 지식 규칙 (Knowledge Rules)
 
 | 역할 | 알 수 있는 정보 |
 |------|----------------|
@@ -63,7 +119,7 @@ interface GameState {
 
 ---
 
-## 4. 퀘스트 팀 크기 (인원수별)
+## 5. 퀘스트 팀 크기 (인원수별)
 
 | 인원 | R1 | R2 | R3 | R4 | R5 |
 |------|----|----|----|----|-----|
@@ -78,7 +134,7 @@ interface GameState {
 
 ---
 
-## 5. 승리 판정 (questConfig.ts)
+## 6. 승리 판정 (questConfig.ts)
 
 - `checkWinCondition(questResults)` → `'evil_wins' | 'good_wins_assassination' | null`
 - 실패 3회 → `evil_wins`
@@ -87,7 +143,7 @@ interface GameState {
 
 ---
 
-## 6. 타임아웃 (timerManager.ts)
+## 7. 타임아웃 (timerManager.ts)
 
 ### 퀘스트 투표 타임아웃 (Quest Timer)
 
@@ -113,7 +169,7 @@ interface GameState {
 
 ---
 
-## 7. DB 스키마 (data/avalon.db)
+## 8. DB 스키마 (data/avalon.db)
 
 ```sql
 games (
@@ -138,7 +194,7 @@ game_players (
 
 ---
 
-## 8. 보안 원칙
+## 9. 보안 원칙
 
 - `roles`, `questVotes`는 절대 공개 채널/콘솔 출력 금지
 - 모든 버튼/커맨드 처리 시 검증 순서:
@@ -149,7 +205,7 @@ game_players (
 
 ---
 
-## 9. 버튼 customId 규칙
+## 10. 버튼 customId 규칙
 
 | customId | 설명 |
 |----------|------|
@@ -164,7 +220,7 @@ game_players (
 
 ---
 
-## 10. 안정성 및 동시성 설계
+## 11. 안정성 및 동시성 설계
 
 ### isTransitioning 플래그
 
@@ -208,7 +264,7 @@ Node.js 단일 스레드 모델에서도 `await` 구간 사이에 두 핸들러�
 
 ---
 
-## 11. 무조작 방 자동 정리 (Auto-cancel)
+## 12. 무조작 방 자동 정리 (Auto-cancel)
 
 ### 정책
 
@@ -264,7 +320,7 @@ bot-triggered 전환 (quest 타임아웃 콜백 등, router 미경유)
 
 ---
 
-## 12. 단계별 커맨드 접근
+## 13. 단계별 커맨드 접근
 
 각 서브커맨드가 허용되는 phase. ✅ = 허용, ❌ = 차단.
 
@@ -283,12 +339,13 @@ bot-triggered 전환 (quest 타임아웃 콜백 등, router 미경유)
 | `history` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | `stats` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | |
 | `rules` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 방 조회 없음, DM에서도 사용 가능 |
+| `role-config` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | 방장 전용, LOBBY에서만 변경 가능 |
 
 > `leave` / `cancel`은 게임 진행 중(`proposal`~`assassination`) 차단되며, 재시작하려면 `/avalon restart`를 사용해야 한다.
 
 ---
 
-## 13. 단계 전환별 필드 리셋 보장
+## 14. 단계 전환별 필드 리셋 보장
 
 각 전환 함수(`transitions.ts`)가 초기화하는 GameState 필드.
 

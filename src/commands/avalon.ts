@@ -11,7 +11,16 @@ import {
 } from 'discord.js';
 import { hasRoom, createRoom, getRoom, deleteRoom } from '../game/gameManager';
 import { BASIC_RULES, ROLE_RULES, WIN_RULES } from '../game/rules';
-import { assignRoles, buildDmMessage, getAssassinId, getMerlinId, ROLE_INFO } from '../game/roles';
+import {
+  assignRolesFromConfig,
+  buildDmMessage,
+  getAssassinId,
+  getMerlinId,
+  getDefaultRoleConfig,
+  validateRoleConfig,
+  ROLE_INFO,
+  RoleConfig,
+} from '../game/roles';
 import { getTeamSize } from '../game/questConfig';
 import { clearQuestTimer } from '../game/timerManager';
 import { toFinished } from '../game/transitions';
@@ -83,6 +92,23 @@ export const data = new SlashCommandBuilder()
             { name: '승리 조건', value: 'win' },
           ),
       ),
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('role-config')
+      .setDescription('게임 역할 구성을 설정합니다 (방장 전용, LOBBY 상태에서만 가능)')
+      .addIntegerOption((o) =>
+        o.setName('merlin').setDescription('멀린 수 (반드시 1)').setRequired(true).setMinValue(0).setMaxValue(1),
+      )
+      .addIntegerOption((o) =>
+        o.setName('assassin').setDescription('암살자 수 (반드시 1)').setRequired(true).setMinValue(0).setMaxValue(1),
+      )
+      .addIntegerOption((o) =>
+        o.setName('loyal').setDescription('아서의 충신 수 (0 이상)').setRequired(true).setMinValue(0),
+      )
+      .addIntegerOption((o) =>
+        o.setName('minion').setDescription('모드레드의 부하 수 (0 이상)').setRequired(true).setMinValue(0),
+      ),
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -102,6 +128,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     case 'history':     return handleHistory(interaction);
     case 'stats':       return handleStats(interaction);
     case 'rules':       return handleRules(interaction);
+    case 'role-config': return handleRoleConfig(interaction);
   }
 }
 
@@ -256,7 +283,19 @@ async function handleStatus(interaction: ChatInputCommandInteraction): Promise<v
     )
     .setFooter({ text: `방 생성: ${room.createdAt.toLocaleString('ko-KR')}` });
 
-  if (room.phase !== 'waiting') {
+  if (room.phase === 'waiting') {
+    const effectiveConfig = room.roleConfig ?? (
+      room.players.length >= MIN_PLAYERS ? getDefaultRoleConfig(room.players.length) : null
+    );
+    if (effectiveConfig) {
+      const { merlin, assassin, loyal, minion } = effectiveConfig;
+      const label = room.roleConfig ? '역할 설정' : '역할 설정 (기본값)';
+      embed.addFields({
+        name: label,
+        value: `멀린 **${merlin}** / 암살자 **${assassin}** / 충신 **${loyal}** / 부하 **${minion}** (총 **${merlin + assassin + loyal + minion}**명)`,
+      });
+    }
+  } else {
     const leader = room.players[room.leaderIndex];
     embed.addFields(
       { name: '라운드', value: `${room.round} / 5`, inline: true },
@@ -332,9 +371,22 @@ async function handleStart(interaction: ChatInputCommandInteraction): Promise<vo
     return;
   }
 
+  // roleConfig 초기화 (없으면 기본 설정 복사본 사용)
+  if (!room.roleConfig) {
+    room.roleConfig = getDefaultRoleConfig(room.players.length);
+  }
+  const configError = validateRoleConfig(room.roleConfig, room.players.length);
+  if (configError) {
+    await interaction.reply({
+      content: `❌ 역할 설정 오류: ${configError}\n\`/avalon role-config\`로 수정하거나 플레이어 수를 확인하세요.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   // 역할 배정 (roles는 절대 로그/채널 출력 금지)
   const playerIds = room.players.map((p) => p.id);
-  room.roles = assignRoles(playerIds, room.players.length);
+  room.roles = assignRolesFromConfig(playerIds, room.roleConfig);
   room.phase = 'proposal';
   room.round = 1;
   room.leaderIndex = Math.floor(Math.random() * room.players.length);
@@ -670,4 +722,53 @@ async function handleRules(interaction: ChatInputCommandInteraction): Promise<vo
   const { title, color, description } = RULES_META[type];
   const embed = new EmbedBuilder().setTitle(title).setColor(color).setDescription(description);
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+}
+
+// ── role-config ───────────────────────────────────────────
+
+async function handleRoleConfig(interaction: ChatInputCommandInteraction): Promise<void> {
+  const { guildId, channelId } = interaction;
+  if (!guildId) {
+    await interaction.reply({ content: '이 커맨드는 서버에서만 사용 가능합니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const room = getRoom(guildId, channelId);
+  if (!room) {
+    await interaction.reply({ content: '이 채널에 방이 없습니다. `/avalon create`로 방을 만드세요.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (room.hostUserId !== interaction.user.id) {
+    await interaction.reply({ content: '방장만 역할 설정을 변경할 수 있습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (room.phase !== 'waiting') {
+    await interaction.reply({ content: '게임이 시작된 후에는 역할 설정을 변경할 수 없습니다.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const merlin   = interaction.options.getInteger('merlin', true);
+  const assassin = interaction.options.getInteger('assassin', true);
+  const loyal    = interaction.options.getInteger('loyal', true);
+  const minion   = interaction.options.getInteger('minion', true);
+
+  const newConfig: RoleConfig = { merlin, assassin, loyal, minion };
+  const error = validateRoleConfig(newConfig, room.players.length);
+  if (error) {
+    await interaction.reply({
+      content: `❌ ${error}\n현재 인원: **${room.players.length}**명`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  room.roleConfig = newConfig;
+  const total = merlin + assassin + loyal + minion;
+  await interaction.reply({
+    content:
+      `✅ 역할 설정이 업데이트되었습니다.\n` +
+      `멀린 **${merlin}** / 암살자 **${assassin}** / 아서의 충신 **${loyal}** / 모드레드의 부하 **${minion}** (총 **${total}**명)`,
+  });
 }

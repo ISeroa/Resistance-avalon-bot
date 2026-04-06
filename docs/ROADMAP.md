@@ -114,7 +114,32 @@
 
 ---
 
+## Phase 12 - RoleConfig (방별 역할 설정) ✅
+- [x] `RoleConfig` 타입 추가 (`merlin / assassin / loyal / minion: number`)
+- [x] `DEFAULT_ROLE_TABLE` — 5~10인 기본 설정 (`Readonly`, 원본 불변)
+- [x] `getDefaultRoleConfig(playerCount)` — 해당 인원 기본 설정 복사본 반환
+- [x] `validateRoleConfig(config, playerCount): string | null` — 총합·merlin/assassin 1명 고정·음수 방지
+- [x] `buildRolePool(config): RoleName[]` — RoleConfig → 역할 배열 변환
+- [x] `assignRolesFromConfig(playerIds, config)` — RoleConfig 기반 역할 배정 (기존 `assignRoles` 유지)
+- [x] `GameState.roleConfig: RoleConfig | null` 필드 추가 (초기값 `null`)
+- [x] `/avalon role-config merlin assassin loyal minion` 서브커맨드 추가
+  - LOBBY 단계 + 방장 권한 검증
+  - `validateRoleConfig` 통과 시에만 `room.roleConfig` 갱신
+  - 반영 성공 시 현재 설정 요약 메시지 출력
+- [x] `handleStart` 수정 — `roleConfig` null이면 기본값 자동 초기화, `assignRolesFromConfig` 사용
+- [x] `handleStatus` 수정 — LOBBY 단계에서 현재 roleConfig(또는 기본값) 표시
+- [x] DESIGN.md 섹션 3 신규 — RoleConfig 시스템, 기본 테이블, 검증 규칙, 배정 흐름, 확장 고려사항
+- [x] DESIGN.md 섹션 13 — `role-config` 커맨드 행 추가
+- [x] `src/__tests__/roleConfig.test.ts` 신규 — 26개 테스트
+  - `getDefaultRoleConfig`: 복사본 독립성, 범위 예외
+  - `validateRoleConfig`: 유효/무효 케이스 각각
+  - `buildRolePool`: 역할 수·진영 검증
+  - `assignRolesFromConfig`: 배정 완전성·역할 수·선악 진영
+
+---
+
 ## 향후 확장 아이디어
+- [ ] Percival / Morgana / Mordred / Oberon RoleConfig 확장
 - [ ] 진행 중 게임 상태 DB 저장 (봇 재시작 복구)
 - [ ] 라운드별 상세 기록 저장 (팀 구성, 투표 결과)
 - [ ] 서버별 리더보드
